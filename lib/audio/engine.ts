@@ -30,6 +30,9 @@ export class Engine {
   private scheduler: Scheduler | null = null;
   private timerId: number | null = null;
   private playing = false;
+
+  /** play() 시작마다 발급하고 stop()에서 무효화하는 세션 번호. */
+  private session = 0;
   private metronomeOn = false;
   private bpm: number;
 
@@ -56,21 +59,22 @@ export class Engine {
   async play(): Promise<void> {
     if (this.playing) return;
 
-    // 가드는 await 앞에서 동기적으로 세운다. 콜드 스타트에서는 아래
-    // ensureRunning()이 진짜로 수십 ms 걸리는 await이라, playing을 그
-    // 뒤에 세우면 그 틈으로 들어온 두 번째 play() 호출도 이 가드를
-    // 통과해 setInterval을 한 번 더 건다 — stop()은 마지막 timerId만
+    // 콜드 스타트에서 ensureRunning()은 수십 ms 걸리는 진짜 await이다.
+    // 그 창 안에서 play/stop이 어떤 순서로 겹쳐도 살아남을 세션 번호를
+    // await 앞에서 동기적으로 발급한다. 불리언 하나로는 부족하다 —
+    // play -> stop -> play 순서면 playing이 다시 true라서 먼저 시작한
+    // 호출도 통과해 setInterval을 하나 더 걸고, stop()은 마지막 timerId만
     // 지우므로 먼저 걸린 타이머가 고아가 되어 dispose()로도 못 없앤다.
     this.playing = true;
+    const session = ++this.session;
 
     const ctx = getAudioContext();
     await ensureRunning();
 
-    // await하는 동안 stop()이 끼어들었을 수 있다 (시작 중에 사용자가
-    // 정지를 누른 경우). stop()이 이미 playing을 false로 내렸다면 여기서
-    // 멈춘다 — 그러지 않으면 "정지를 눌렀는데 재생이 시작된다" 버그가
-    // 되살아난다. 아직 타이머도, 그래프도 안 만들었으니 되돌릴 것도 없다.
-    if (!this.playing) return;
+    // 내가 시작한 세션이 아직 최신인가. 아니라면 그 사이 stop()이 눌렸거나
+    // 더 나중의 play()가 주도권을 가져간 것이므로 여기서 끝낸다. 아직
+    // 타이머도 그래프도 안 만들었으니 되돌릴 것은 없다.
+    if (!this.playing || this.session !== session) return;
 
     this.ctx = ctx;
 
@@ -93,6 +97,9 @@ export class Engine {
   }
 
   stop(): void {
+    // 아직 await 중인 play()가 있다면 이 증가로 무효화된다.
+    this.session += 1;
+
     if (this.timerId !== null) {
       window.clearInterval(this.timerId);
       this.timerId = null;
