@@ -4,7 +4,7 @@ import { Scheduler } from "@/lib/audio/scheduler";
 import type { AudioClock, NoteSink } from "@/lib/audio/types";
 import { buildDemoSong } from "@/lib/score/fixture";
 import { ticksToSeconds } from "@/lib/score/time";
-import { PPQ, type Song } from "@/lib/score/types";
+import { DRUM_HIHAT, PPQ, type Song } from "@/lib/score/types";
 
 class FakeClock implements AudioClock {
   currentTime = 0;
@@ -112,11 +112,10 @@ describe("Scheduler", () => {
   });
 
   it("horizon 경계에 정확히 걸친 타일은 다음 틱으로 넘어간다", () => {
-    // lookahead를 0.5초로 두면 첫 advance의 경계는 정확히 1920틱(2초)이 아니라 0.5초
     const boundaryClock = new FakeClock();
     const boundarySink = new RecordingSink();
-    // 0.5초 = 240틱. 피아노 두 번째 타일은 1920틱이므로 경계 테스트는
-    // lookahead를 2초로 잡아 둘째 마디(정확히 2.0초)가 경계에 걸리게 한다
+    // 피아노 두 번째 타일은 1920틱(120BPM에서 2.0초)이므로
+    // lookahead를 2초로 잡아 그 경계에 정확히 걸리게 한다
     const s = new Scheduler(song, boundaryClock, boundarySink, 2);
     s.start(0);
     s.advance();
@@ -168,6 +167,23 @@ describe("Scheduler.setTempo", () => {
     for (const event of added) {
       expect(event.when).toBeGreaterThanOrEqual(lastWhenBefore - 1e-9);
     }
+
+    // 순서만 보면 "현재 위치(3840틱)에 재앵커"처럼 잘못 구현해도 통과한다.
+    // 하이햇은 3840틱과 4080틱에 있어 setTempo가 옮기는 경계(scheduledUntilTick
+    // = 3936틱)를 사이에 두고 걸친다. 3840틱은 경계 이전이라 120BPM으로 이미
+    // 예약됐고(when=4.0), 4080틱은 경계 이후라 240BPM으로 예약된다:
+    // 4.1 + (4080 - 3936) / 480 * (60 / 240) = 4.175.
+    // 틀린 앵커(3840@4.0)로 계산하면 간격이 0.125가 되어 이 값과 어긋난다.
+    const hihatWhens = sink.events
+      .filter((e) => e.lineId === "line-drums" && e.note === DRUM_HIHAT)
+      .map((e) => e.when);
+    const beforeBoundary = hihatWhens.find((w) => Math.abs(w - 4.0) < 1e-9);
+    const afterBoundary = hihatWhens.find(
+      (w) => Math.abs(w - 4.175) < 1e-9,
+    );
+    expect(beforeBoundary).toBeDefined();
+    expect(afterBoundary).toBeDefined();
+    expect(afterBoundary! - beforeBoundary!).toBeCloseTo(0.175, 9);
   });
 
   it("템포를 바꾸면 이후 간격이 새 템포를 따른다", () => {
@@ -193,6 +209,39 @@ describe("Scheduler.setTempo", () => {
     expect(scheduler.tempo).toBe(song.tempo);
     scheduler.setTempo(90);
     expect(scheduler.tempo).toBe(90);
+  });
+
+  it("템포를 바꿔도 currentTick이 뒤로 가지 않고, lookahead 구간 안에서는 옛 템포를 따른다", () => {
+    const song = buildDemoSong();
+    const clock = new FakeClock();
+    const sink = new RecordingSink();
+    const scheduler = new Scheduler(song, clock, sink);
+    scheduler.start(0);
+
+    // 4초까지 120BPM으로 굴린다. scheduledUntilTick은 timeToTick(4.1) = 3936.
+    run(scheduler, clock, 4);
+    const beforeTempoChange = scheduler.currentTick();
+    expect(beforeTempoChange).toBeCloseTo(3840, 6);
+
+    scheduler.setTempo(240);
+
+    // 시계는 그대로인데 새 앵커(3936@4.1)에서 새 템포로 역산하면 뒤로
+    // 튄다 — 3840에서 그대로 이어져야 한다.
+    expect(scheduler.currentTick()).toBeCloseTo(beforeTempoChange, 6);
+    expect(scheduler.currentTick()).toBeGreaterThanOrEqual(
+      beforeTempoChange - 1e-9,
+    );
+
+    // t=4.05: 아직 새 앵커 시각(4.1) 이전이므로 옛 템포(120BPM)로 계속
+    // 전진해야 한다. 실제로 예약된 소리도 옛 템포로 울리는 구간이다.
+    clock.advanceBy(0.05);
+    expect(scheduler.currentTick()).toBeCloseTo(3888, 6);
+    expect(scheduler.currentTick()).toBeGreaterThan(beforeTempoChange);
+
+    // t=4.1: 새 앵커 시각에 도달 — 옛 앵커와 새 앵커 양쪽으로 계산해도
+    // 같은 값(3936)으로 수렴해야 틈이나 겹침이 없다.
+    clock.advanceBy(0.05);
+    expect(scheduler.currentTick()).toBeCloseTo(3936, 6);
   });
 });
 

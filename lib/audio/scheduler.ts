@@ -18,11 +18,20 @@ export class Scheduler {
   private readonly lookahead: number;
 
   /** 라인별 "다음에 예약할 타일" 인덱스. 전체 스캔을 피하는 장치. */
-  private cursors: number[] = [];
+  private cursors: number[];
 
   private anchorTick = 0;
   private anchorTime = 0;
   private bpm: number;
+
+  /**
+   * setTempo 직전까지 쓰던 앵커. 새 앵커는 미래(scheduledUntilTick)를
+   * 가리키므로, 그 미래 시각에 아직 도달하지 않은 lookahead 구간 동안은
+   * currentTick()이 새 템포가 아니라 이 옛 앵커로 역산해야 한다 —
+   * 그 구간은 이미 옛 템포로 예약이 끝났기 때문이다.
+   */
+  private prevAnchor: { tick: number; time: number; bpm: number } | null =
+    null;
 
   /** 이 틱보다 앞은 예약이 끝났다. setTempo가 앵커를 옮길 기준점. */
   private scheduledUntilTick = 0;
@@ -42,6 +51,9 @@ export class Scheduler {
     this.sink = sink;
     this.lookahead = lookaheadSeconds;
     this.bpm = song.tempo;
+    // start() 전에 advance()가 불려도 undefined 커서로 조용히 no-op하지
+    // 않도록 라인 수만큼 0으로 채워 둔다.
+    this.cursors = song.lines.map(() => 0);
   }
 
   get tempo(): number {
@@ -54,6 +66,8 @@ export class Scheduler {
     this.anchorTick = 0;
     this.scheduledUntilTick = 0;
     this.cursors = this.song.lines.map(() => 0);
+    // 새 재생은 옛 템포 구간이 없다 — 지난 재생의 앵커가 남아 있으면 안 된다.
+    this.prevAnchor = null;
   }
 
   tickToTime(tick: number): number {
@@ -66,6 +80,14 @@ export class Scheduler {
 
   /** 표시용 현재 틱. 재생 중이 아니면 의미가 없다. */
   currentTick(): number {
+    // setTempo 직후 anchorTime은 미래(scheduledUntilTick 시각)를 가리킨다.
+    // 그 시각에 아직 도달하지 않았다면 지금 재생 중인 소리는 여전히 옛
+    // 템포로 예약된 것이므로, 새 앵커로 역산하면 재생 위치가 거꾸로 튄다.
+    // 옛 앵커(prevAnchor)로 계산해 옛 템포를 그대로 따라간다.
+    if (this.prevAnchor !== null && this.clock.currentTime < this.anchorTime) {
+      const { tick, time, bpm } = this.prevAnchor;
+      return tick + (((this.clock.currentTime - time) * bpm) / 60) * PPQ;
+    }
     return this.timeToTick(this.clock.currentTime);
   }
 
@@ -111,6 +133,14 @@ export class Scheduler {
    */
   setTempo(bpm: number): void {
     const boundary = this.scheduledUntilTick;
+    // currentTick()이 lookahead 구간 동안 참조할 옛 앵커를 남겨 둔다.
+    // tickToTime(예약 경로)은 아래에서 갱신되는 새 앵커만 본다 — 예약
+    // 로직은 그대로 두고 표시 경로(currentTick)만 이 값을 추가로 본다.
+    this.prevAnchor = {
+      tick: this.anchorTick,
+      time: this.anchorTime,
+      bpm: this.bpm,
+    };
     this.anchorTime = this.tickToTime(boundary);
     this.anchorTick = boundary;
     this.bpm = bpm;
