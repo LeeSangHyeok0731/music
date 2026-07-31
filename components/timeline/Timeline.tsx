@@ -8,6 +8,7 @@ import { useStudio } from "@/state/StudioProvider";
 import { BarLines } from "./BarLines";
 import { DrumGrid } from "./DrumGrid";
 import { LineHeaders } from "./LineHeaders";
+import { Playflag } from "./Playflag";
 import { TileLine } from "./TileLine";
 import { tickToPx } from "./layout";
 
@@ -30,6 +31,7 @@ export function Timeline() {
               <TileLine key={line.id} line={line} perBar={perBar} />
             ),
           )}
+          <Playflag scrollerRef={scrollerRef} perBar={perBar} />
         </div>
       </div>
     </div>
