@@ -68,32 +68,46 @@ export class Engine {
     this.playing = true;
     const session = ++this.session;
 
-    const ctx = getAudioContext();
-    await ensureRunning();
+    try {
+      const ctx = getAudioContext();
+      await ensureRunning();
 
-    // 내가 시작한 세션이 아직 최신인가. 아니라면 그 사이 stop()이 눌렸거나
-    // 더 나중의 play()가 주도권을 가져간 것이므로 여기서 끝낸다. 아직
-    // 타이머도 그래프도 안 만들었으니 되돌릴 것은 없다.
-    if (!this.playing || this.session !== session) return;
+      // 내가 시작한 세션이 아직 최신인가. 아니라면 그 사이 stop()이 눌렸거나
+      // 더 나중의 play()가 주도권을 가져간 것이므로 여기서 끝낸다. 아직
+      // 타이머도 그래프도 안 만들었으니 되돌릴 것은 없다. stop()이 이미
+      // playing을 false로 되돌려 놓았으니 여기서 다시 만질 필요는 없다.
+      if (!this.playing || this.session !== session) return;
 
-    this.ctx = ctx;
+      this.ctx = ctx;
 
-    this.buildGraph(ctx);
+      this.buildGraph(ctx);
 
-    const sink: NoteSink = {
-      schedule: (lineId, note, when, dur, vel) => {
-        this.instruments.get(lineId)?.play(note, when, dur, vel);
-      },
-    };
+      const sink: NoteSink = {
+        schedule: (lineId, note, when, dur, vel) => {
+          this.instruments.get(lineId)?.play(note, when, dur, vel);
+        },
+      };
 
-    const startTime = ctx.currentTime + START_DELAY;
-    this.scheduler = new Scheduler(this.song, ctx, sink);
-    this.scheduler.setTempo(this.bpm);
-    this.scheduler.start(startTime);
-    this.nextClickTick = 0;
+      const startTime = ctx.currentTime + START_DELAY;
+      this.scheduler = new Scheduler(this.song, ctx, sink);
+      this.scheduler.setTempo(this.bpm);
+      this.scheduler.start(startTime);
+      this.nextClickTick = 0;
 
-    this.timerId = window.setInterval(() => this.onTimer(), TIMER_MS);
-    this.onTimer();
+      this.timerId = window.setInterval(() => this.onTimer(), TIMER_MS);
+      this.onTimer();
+    } catch (err) {
+      // resume()이 거부되거나(자동재생 정책) getAudioContext()가 미지원
+      // 브라우저에서 던지면, 타이머도 그래프도 없이 playing만 true로 남는다.
+      // 그대로 두면 다음 play() 호출이 최상단 가드(if (this.playing) return;)에
+      // 걸려 조용히 아무 일도 안 하므로, 재시도가 실제로 다시 시도되도록
+      // 여기서 되돌린다. 그사이 stop()이 이미 session을 바꿔놨다면(=이미
+      // playing=false) 손대지 않는다 — 이 실패가 그 세션 소유는 아니다.
+      if (this.session === session) {
+        this.playing = false;
+      }
+      throw err;
+    }
   }
 
   stop(): void {
