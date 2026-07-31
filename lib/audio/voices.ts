@@ -14,6 +14,7 @@ type ActiveVoice = {
  */
 export class VoicePool {
   private active: ActiveVoice[] = [];
+  private readonly FADE_DURATION = 0.005; // 페이드 시간: 5ms
 
   constructor(
     private readonly ctx: AudioContext,
@@ -31,12 +32,7 @@ export class VoicePool {
     if (this.active.length >= this.max) {
       const oldest = this.active.shift();
       if (oldest) {
-        fadeOutAndStop(oldest.gain.gain, when);
-        // 페이드가 끝난 뒤 노드를 회수한다. 여기서 바로 disconnect하면
-        // 페이드가 잘려 클릭 노이즈가 난다.
-        window.setTimeout(() => {
-          oldest.gain.disconnect();
-        }, 50);
+        this.stopAndRetireVoice(oldest.gain, when);
       }
     }
 
@@ -57,17 +53,28 @@ export class VoicePool {
     this.active = [];
 
     for (const voice of releasing) {
-      fadeOutAndStop(voice.gain.gain, when);
+      this.stopAndRetireVoice(voice.gain, when);
     }
+  }
 
-    // 페이드가 끝난 뒤 노드를 회수한다. 여기서 바로 disconnect하면
-    // 페이드가 잘려 클릭 노이즈가 난다. 오디오 예약이 아니라 정리용
-    // 타이머이므로 setTimeout을 써도 된다.
+  /**
+   * 보이스를 페이드아웃시키고 회수한다. voice stealing과 정지에서 쓴다.
+   *
+   * 페이드 시간과 현재 오디오 시간의 거리를 고려해서 disconnect 시점을 정해야
+   * 한다. `when`이 미래일 수 있기 때문이다 (look-ahead 스케줄러에서 최대 ~100ms
+   * 앞). 고정 50ms으로는 때때로 페이드가 시작하기 전에 노드를 끊어 클릭 노이즈가
+   * 난다. 지연을 오디오 시간의 거리에서 계산해 두 시계의 괴리를 없앤다.
+   */
+  private stopAndRetireVoice(gain: GainNode, when: number): void {
+    fadeOutAndStop(gain.gain, when, this.FADE_DURATION);
+    // 페이드가 시작할 때까지의 거리 + 페이드 기간 + 안전 마진
+    const delayMs =
+      Math.max(0, (when - this.ctx.currentTime) * 1000) +
+      this.FADE_DURATION * 1000 +
+      20;
     window.setTimeout(() => {
-      for (const voice of releasing) {
-        voice.gain.disconnect();
-      }
-    }, 50);
+      gain.disconnect();
+    }, delayMs);
   }
 
   private reap(now: number): void {
