@@ -27,7 +27,11 @@ export class VoicePool {
    * 엔벨로프를 예약한다.
    */
   acquire(when: number, endsAt: number): GainNode {
-    this.reap(when);
+    // when이 아니라 지금 시각으로 회수한다. when은 최대 lookahead(100ms)만큼
+    // 미래라, when 기준으로 회수하면 아직 울리고 있는 보이스를 페이드 없이
+    // 끊는다. 하이햇(감쇠 50ms)처럼 엔벨로프 전체가 lookahead보다 짧은 소리는
+    // 한창 울리는 도중에 잘려 클릭이 난다.
+    this.reap(this.ctx.currentTime);
 
     if (this.active.length >= this.max) {
       const oldest = this.active.shift();
@@ -77,6 +81,12 @@ export class VoicePool {
     }, delayMs);
   }
 
+  /**
+   * 이미 끝난 보이스를 회수한다. 여기서는 페이드 없이 바로 끊어도 되는데,
+   * 엔벨로프가 endsAt에 정확히 0으로 내려가 있어 이미 무음이기 때문이다.
+   * 그래서 `now`는 반드시 실제 현재 시각이어야 한다 — 미래 시각을 넘기면
+   * 아직 소리가 남은 보이스를 무음으로 착각해 잘라낸다.
+   */
   private reap(now: number): void {
     const still: ActiveVoice[] = [];
     for (const voice of this.active) {
