@@ -32,6 +32,11 @@ export class VoicePool {
       const oldest = this.active.shift();
       if (oldest) {
         fadeOutAndStop(oldest.gain.gain, when);
+        // 페이드가 끝난 뒤 노드를 회수한다. 여기서 바로 disconnect하면
+        // 페이드가 잘려 클릭 노이즈가 난다.
+        window.setTimeout(() => {
+          oldest.gain.disconnect();
+        }, 50);
       }
     }
 

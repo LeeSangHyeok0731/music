@@ -23,6 +23,9 @@ export function createGuitar(ctx: AudioContext, pool: VoicePool): Instrument {
 
       applyEnvelope(gain.gain, when, vel * 0.22, attack, decay);
 
+      // 두 오실레이터가 같은 필터를 공유한다. 첫 번째만 끝나면 필터를 끊으면
+      // 안 되고, 둘 다 끝날 때까지 기다려야 한다.
+      let ended = 0;
       for (const cents of DETUNE_CENTS) {
         const osc = ctx.createOscillator();
         osc.type = "sawtooth";
@@ -31,7 +34,13 @@ export function createGuitar(ctx: AudioContext, pool: VoicePool): Instrument {
         osc.connect(filter);
         osc.start(when);
         osc.stop(when + attack + decay + 0.05);
-        osc.onended = () => osc.disconnect();
+        osc.onended = () => {
+          osc.disconnect();
+          ended += 1;
+          if (ended === DETUNE_CENTS.length) {
+            filter.disconnect();
+          }
+        };
       }
     },
   };
