@@ -1,37 +1,47 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Bandline
 
-## Getting Started
+브라우저에서 직접 작곡하고 바로 들어보는 웹 시퀀서. 피아노, 어쿠스틱 기타, 일렉기타, 드럼, 베이스를 한 타임라인 위에 올려 한 곡을 만드는 것이 목표다.
 
-First, run the development server:
+> 현재 상태: `create-next-app` 스캐폴드 단계. 아래 구조와 기능은 설계 방향이며 아직 구현되지 않았다.
+
+## 기술 스택
+
+- Next.js 16 (App Router) / React 19 / TypeScript
+- Tailwind CSS 4
+- Web Audio API (브라우저 네이티브 오디오 — 서버 렌더링 불가, 전부 클라이언트)
+
+## 실행
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
+pnpm install
 pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+http://localhost:3000 에서 확인.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 스크립트
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| 명령                | 설명                          |
+| ------------------- | ----------------------------- |
+| `pnpm dev`          | 개발 서버                     |
+| `pnpm build`        | 프로덕션 빌드                 |
+| `pnpm start`        | 빌드 결과 실행                |
+| `pnpm lint`         | ESLint 검사                   |
+| `pnpm format`       | ESLint 자동 수정              |
+| `pnpm check-types`  | TypeScript 타입 검사          |
 
-## Learn More
+## 구조 (계획)
 
-To learn more about Next.js, take a look at the following resources:
+```text
+app/                Next.js App Router 엔트리포인트
+lib/score/          곡 데이터 모델 — 노트, 트랙, 패턴, 템포 (순수 TS)
+lib/audio/          오디오 엔진 — AudioContext, 트랜스포트, 스케줄러, 악기 (순수 TS)
+components/editor/  피아노롤 / 타임라인 / 트랙 UI
+components/ui/      공용 컨트롤
+state/              StudioProvider — 엔진 인스턴스 + React UI 상태
+public/samples/     악기 샘플
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## 개발 규칙
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
-# music
+`AGENTS.md`와 `.claude/rules/*.md`에 아키텍처 경계, 오디오 상태 소유권, 스케줄링 규칙이 정리돼 있다. 코드를 쓰기 전에 읽을 것.
