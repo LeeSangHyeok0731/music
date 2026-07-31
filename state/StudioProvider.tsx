@@ -119,10 +119,13 @@ export function StudioProvider({ children }: { children: React.ReactNode }) {
         setIsPlaying(engine.isPlaying());
       })
       .catch(() => {
-        // 엔진이 스스로 playing을 되돌렸다는 데 기대지 않는다. stop()은
-        // 이미 멱등하게 타이머/그래프를 정리하도록 되어 있으니 여기서도
-        // 한 번 더 불러 재시도가 실제로 통하게 만든다.
-        engine.stop();
+        // 이 실패가 뒤늦게 도착한 것일 수 있다. play -> stop -> play 순서면
+        // 나중 시도가 이미 성공해 재생 중인데 먼저 시도의 resume()이 그 뒤에
+        // reject될 수 있다. 그때 여기서 stop()을 부르거나 에러를 띄우면 멀쩡히
+        // 울리고 있는 세션을 죽인다. 엔진이 지금 재생 중이면 이 실패는 남의
+        // 것이므로 무시한다. 실패한 세션의 playing 플래그는 엔진이 스스로
+        // 되돌리므로(세션이 자기 것일 때만) 여기서 stop()을 부를 필요는 없다.
+        if (engine.isPlaying()) return;
         setIsPlaying(false);
         setError("소리를 시작하지 못했습니다. 재생 버튼을 다시 눌러 주세요.");
       });
