@@ -56,8 +56,22 @@ export class Engine {
   async play(): Promise<void> {
     if (this.playing) return;
 
+    // 가드는 await 앞에서 동기적으로 세운다. 콜드 스타트에서는 아래
+    // ensureRunning()이 진짜로 수십 ms 걸리는 await이라, playing을 그
+    // 뒤에 세우면 그 틈으로 들어온 두 번째 play() 호출도 이 가드를
+    // 통과해 setInterval을 한 번 더 건다 — stop()은 마지막 timerId만
+    // 지우므로 먼저 걸린 타이머가 고아가 되어 dispose()로도 못 없앤다.
+    this.playing = true;
+
     const ctx = getAudioContext();
     await ensureRunning();
+
+    // await하는 동안 stop()이 끼어들었을 수 있다 (시작 중에 사용자가
+    // 정지를 누른 경우). stop()이 이미 playing을 false로 내렸다면 여기서
+    // 멈춘다 — 그러지 않으면 "정지를 눌렀는데 재생이 시작된다" 버그가
+    // 되살아난다. 아직 타이머도, 그래프도 안 만들었으니 되돌릴 것도 없다.
+    if (!this.playing) return;
+
     this.ctx = ctx;
 
     this.buildGraph(ctx);
@@ -74,7 +88,6 @@ export class Engine {
     this.scheduler.start(startTime);
     this.nextClickTick = 0;
 
-    this.playing = true;
     this.timerId = window.setInterval(() => this.onTimer(), TIMER_MS);
     this.onTimer();
   }
@@ -145,8 +158,17 @@ export class Engine {
       this.scheduleClicks(scheduler);
     }
 
-    // 곡 끝을 지나면 스스로 멈춘다
-    if (scheduler.currentTick() > this.song.lengthTicks) {
+    // 곡 끝을 지나도 마지막 노트의 릴리즈 테일이 아직 울리는 중이면
+    // 자르지 않는다. 피아노 최소 0.3초, 킥 고정 0.35초처럼 악기들은
+    // 의도적으로 tile 길이보다 오래 울리도록 되어 있어서, lengthTicks만
+    // 보고 바로 stop() -> releaseAll(5ms 페이드)하면 마지막 비트의 꼬리가
+    // 매번 뚝 잘린다. 풀에 아직 소리 나는 보이스가 없을 때까지 기다린다.
+    const pastEnd = scheduler.currentTick() > this.song.lengthTicks;
+    const stillSounding = this.pool
+      ? this.pool.latestEndsAt() > this.ctx.currentTime
+      : false;
+
+    if (pastEnd && !stillSounding) {
       this.stop();
       this.onStop?.();
     }

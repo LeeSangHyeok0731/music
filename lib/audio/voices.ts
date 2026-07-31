@@ -51,6 +51,22 @@ export class VoicePool {
     return gain;
   }
 
+  /**
+   * 살아있는 보이스 중 가장 늦게 끝나는 시각. 비어 있으면 0을 돌려줘
+   * "지금 아무것도 안 울린다"를 명확히 나타낸다. 순수 조회이며 reap이나
+   * disconnect 등 풀 상태를 건드리지 않는다 — 호출 시점에 따라 결과가
+   * 달라지는 부작용이 있으면 auto-stop 판단에 쓰기 위험해진다.
+   */
+  latestEndsAt(): number {
+    let latest = 0;
+    for (const voice of this.active) {
+      if (voice.endsAt > latest) {
+        latest = voice.endsAt;
+      }
+    }
+    return latest;
+  }
+
   /** 정지할 때 울리고 있는 것을 전부 끊는다. */
   releaseAll(when: number): void {
     const releasing = this.active;
