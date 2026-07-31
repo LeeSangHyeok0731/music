@@ -136,11 +136,21 @@ export class Scheduler {
     // currentTick()이 lookahead 구간 동안 참조할 옛 앵커를 남겨 둔다.
     // tickToTime(예약 경로)은 아래에서 갱신되는 새 앵커만 본다 — 예약
     // 로직은 그대로 두고 표시 경로(currentTick)만 이 값을 추가로 본다.
-    this.prevAnchor = {
-      tick: this.anchorTick,
-      time: this.anchorTime,
-      bpm: this.bpm,
-    };
+    //
+    // 아직 살아 있는 prevAnchor는 덮어쓰지 않는다. 슬라이더 드래그처럼
+    // setTempo가 한 lookahead 구간 안에 연달아 오면, 지금 재생 중인 소리는
+    // 여전히 "첫 변경 이전" 템포로 예약된 것이기 때문이다. 덮어쓰면
+    // currentTick()이 그 구간을 중간 템포로 역산해 다시 뒤로 튄다.
+    if (
+      this.prevAnchor === null ||
+      this.clock.currentTime >= this.anchorTime
+    ) {
+      this.prevAnchor = {
+        tick: this.anchorTick,
+        time: this.anchorTime,
+        bpm: this.bpm,
+      };
+    }
     this.anchorTime = this.tickToTime(boundary);
     this.anchorTick = boundary;
     this.bpm = bpm;

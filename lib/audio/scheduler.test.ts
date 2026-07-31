@@ -243,6 +243,33 @@ describe("Scheduler.setTempo", () => {
     clock.advanceBy(0.05);
     expect(scheduler.currentTick()).toBeCloseTo(3936, 6);
   });
+
+  it("한 lookahead 구간 안에서 템포를 연달아 바꿔도 currentTick이 뒤로 가지 않는다", () => {
+    // 슬라이더 드래그는 pointermove마다 setTempo를 부른다. 두 번째 호출이
+    // 아직 살아 있는 prevAnchor를 덮어쓰면, 지금 울리고 있는 구간을 중간
+    // 템포로 역산해 재생 위치가 다시 뒤로 튄다.
+    const song = buildDemoSong();
+    const clock = new FakeClock();
+    const sink = new RecordingSink();
+    const scheduler = new Scheduler(song, clock, sink);
+    scheduler.start(0);
+
+    run(scheduler, clock, 4);
+    const before = scheduler.currentTick();
+    expect(before).toBeCloseTo(3840, 6);
+
+    // 시계를 전혀 전진시키지 않고 연달아 두 번 — 드래그의 최악 사례
+    scheduler.setTempo(240);
+    scheduler.setTempo(300);
+
+    // 이 구간의 소리는 여전히 120BPM으로 예약돼 있으므로 위치도 그대로다
+    expect(scheduler.currentTick()).toBeCloseTo(before, 6);
+
+    // 새 앵커 시각(4.1) 이전까지는 옛 템포(120BPM)로 전진한다
+    clock.advanceBy(0.05);
+    expect(scheduler.currentTick()).toBeCloseTo(3888, 6);
+    expect(scheduler.currentTick()).toBeGreaterThan(before);
+  });
 });
 
 describe("Scheduler 커서", () => {
