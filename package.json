@@ -1,12 +1,15 @@
 {
-  "name": "music",
+  "name": "bandline",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "pnpm@10.19.0",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "format": "eslint --fix",
+    "check-types": "tsc --noEmit"
   },
   "dependencies": {
     "next": "16.2.12",

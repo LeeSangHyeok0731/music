@@ -39,3 +39,13 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# package managers (this project uses pnpm)
+package-lock.json
+yarn.lock
+
+# claude harness runtime artifacts
+_workspace/
+_workspace_*/
+.pr-tmp/
+.claude/command.log
