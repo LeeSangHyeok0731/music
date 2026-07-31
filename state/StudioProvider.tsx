@@ -65,7 +65,13 @@ export function StudioProvider({ children }: { children: React.ReactNode }) {
   const getEngine = useCallback((): Engine => {
     if (!engineRef.current) {
       const engine = new Engine(song);
-      engine.onStop = () => setIsPlaying(false);
+      // 곡 끝 도달으로 인한 자동 정지도 사용자가 stop을 누른 것과 같은
+      // 결과를 보여줘야 한다 — 안 그러면 재생 헤드가 마지막 샘플 값에
+      // 멈춰 있는데 isPlaying만 false가 되어 두 상태가 서로 다른 얘기를 한다.
+      engine.onStop = () => {
+        setIsPlaying(false);
+        setPosition({ bar: 1, beat: 1 });
+      };
       engineRef.current = engine;
     }
     return engineRef.current;
@@ -86,7 +92,15 @@ export function StudioProvider({ children }: { children: React.ReactNode }) {
     const id = window.setInterval(() => {
       const engine = engineRef.current;
       if (!engine) return;
-      setPosition(ticksToBarBeat(engine.currentTick(), song.timeSignature));
+      setPosition((prev) => {
+        const next = ticksToBarBeat(engine.currentTick(), song.timeSignature);
+        // bar/beat가 그대로면 이전 객체 identity를 유지한다. 안 그러면
+        // 100ms마다 새 객체가 생겨 실제로 안 바뀐 8/10 샘플까지 컨텍스트를
+        // 구독하는 전부를 리렌더시킨다 — 재생 중 무거운 리렌더는 글리치의
+        // 주된 원인이다.
+        if (next.bar === prev.bar && next.beat === prev.beat) return prev;
+        return next;
+      });
     }, POSITION_SAMPLE_MS);
 
     return () => window.clearInterval(id);
@@ -95,10 +109,20 @@ export function StudioProvider({ children }: { children: React.ReactNode }) {
   const play = useCallback(() => {
     setError(null);
     // 이 호출은 클릭 핸들러 안에서 시작되므로 resume이 허용된다
-    getEngine()
+    const engine = getEngine();
+    engine
       .play()
-      .then(() => setIsPlaying(true))
+      .then(() => {
+        // 프로미스가 resolve됐다고 재생 중인 게 아니다 — stop-during-start
+        // 레이스에서 엔진은 세션이 뒤집히면 조용히 반환한다(던지지 않음).
+        // isPlaying()이 엔진의 진짜 상태이므로 그걸 그대로 반영한다.
+        setIsPlaying(engine.isPlaying());
+      })
       .catch(() => {
+        // 엔진이 스스로 playing을 되돌렸다는 데 기대지 않는다. stop()은
+        // 이미 멱등하게 타이머/그래프를 정리하도록 되어 있으니 여기서도
+        // 한 번 더 불러 재시도가 실제로 통하게 만든다.
+        engine.stop();
         setIsPlaying(false);
         setError("소리를 시작하지 못했습니다. 재생 버튼을 다시 눌러 주세요.");
       });
