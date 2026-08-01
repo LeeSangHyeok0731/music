@@ -11,6 +11,7 @@ import { LineHeaders } from "./LineHeaders";
 import { Playflag } from "./Playflag";
 import { Ruler } from "./Ruler";
 import { TileLine } from "./TileLine";
+import { TilePopover } from "./TilePopover";
 import { tickToPx } from "./layout";
 
 export function Timeline() {
@@ -70,6 +71,7 @@ export function Timeline() {
             ),
           )}
           <Playflag scrollerRef={scrollerRef} perBar={perBar} />
+          <TilePopover perBar={perBar} />
         </div>
       </div>
     </div>
