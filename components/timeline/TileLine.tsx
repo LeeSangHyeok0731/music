@@ -1,6 +1,6 @@
 "use client";
 
-import { memo } from "react";
+import { memo, useRef } from "react";
 
 import { midiToName } from "@/lib/score/notes";
 import type { Line } from "@/lib/score/types";
@@ -19,6 +19,9 @@ const COLORS: Record<string, string> = {
 const TILE_INSET = 6;
 /** 오른쪽 끝 이 폭 안에서 누르면 길이 조절이다. */
 const RESIZE_HANDLE_PX = 6;
+
+/** 이 거리 안에서 뗐으면 클릭으로 본다. 넘으면 스크롤·드래그 의도다. */
+const CLICK_SLOP_PX = 4;
 
 function TileLineImpl({
   line,
@@ -41,6 +44,8 @@ function TileLineImpl({
   onSelect: (ref: TileRef | null) => void;
 }) {
   const color = COLORS[line.instrument] ?? COLORS.piano;
+  /** 빈 칸을 누른 지점. 뗄 때 클릭인지 드래그인지 판정한다. */
+  const pressRef = useRef<{ x: number; y: number } | null>(null);
 
   const drag = useTileDrag({
     perBar,
@@ -60,8 +65,26 @@ function TileLineImpl({
         // 왼쪽 버튼만. pointerdown은 우클릭에도 오므로, 막지 않으면
         // 빈 칸에서 우클릭할 때마다 타일이 생기고 그 위에 컨텍스트 메뉴가 뜬다.
         if (event.button !== 0) return;
+        pressRef.current = { x: event.clientX, y: event.clientY };
+      }}
+      onPointerUp={(event) => {
+        const press = pressRef.current;
+        pressRef.current = null;
+        if (!editable || !press) return;
+
+        // 누른 자리에서 거의 안 움직였을 때만 만든다. pointerdown에서 바로
+        // 만들면 두 가지가 깨진다 — 타임라인을 가로로 끌어 스크롤하려는
+        // 터치가 매번 타일을 남기고, 팝오버를 닫으려고 빈 곳을 클릭할 때마다
+        // 타일이 생겨 "편집하지 않고 닫는" 방법이 없어진다.
+        const moved =
+          Math.abs(event.clientX - press.x) + Math.abs(event.clientY - press.y);
+        if (moved > CLICK_SLOP_PX) return;
+
         const rect = event.currentTarget.getBoundingClientRect();
         edit.createAt(line.id, pxToTick(event.clientX - rect.left, perBar));
+      }}
+      onPointerCancel={() => {
+        pressRef.current = null;
       }}
     >
       {line.tiles.map((tile) => {

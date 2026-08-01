@@ -287,3 +287,66 @@ export function toggleDrumCell(
     line.tiles.filter((tile) => tile.id !== existing!.id),
   );
 }
+
+/** 드럼 격자에서 칠할 칸 하나. */
+export type DrumCell = { start: number; piece: number };
+
+/**
+ * 드럼 칸 여러 개를 한 번에 켜거나 끈다. 이어 칠하기의 커밋 단위다.
+ *
+ * `toggleDrumCell`을 칸마다 부르면 스트로크 하나가 실행취소 히스토리를
+ * 십수 칸씩 잡아먹는다. 하이햇 한 마디만 칠해도 16칸이라, 세 번 칠하면
+ * 이전 편집이 전부 밀려나고 되돌리려면 Ctrl+Z를 열여섯 번 눌러야 한다.
+ * 드래그 중에는 미리보기만 하고 pointerup에서 이 함수로 한 번 커밋한다 —
+ * 타일 드래그가 같은 이유로 그렇게 한다.
+ *
+ * @param on true면 켜기만, false면 끄기만. 스트로크 전체가 한 방향이다.
+ */
+export function toggleDrumCells(
+  song: Song,
+  lineId: string,
+  cells: DrumCell[],
+  on: boolean,
+): Song {
+  const line = lineOf(song, lineId);
+  if (!line) return song;
+
+  let tiles = line.tiles;
+  let changed = false;
+  // 한 스트로크 안에서 id가 겹치지 않도록 이어서 발급한다. nextTileId는
+  // 곡을 훑어 최댓값을 찾는데, 아직 커밋 전이라 곡에는 반영돼 있지 않다.
+  let nextId = Number(nextTileId(song).slice("tile-".length));
+
+  for (const cell of cells) {
+    // 스냅 전에 거른다. snapToGrid가 음수를 0으로 클램프하므로, 스냅 후에
+    // 검사하면 격자 왼쪽 밖을 지나간 포인터가 첫 칸을 칠하게 된다.
+    if (cell.start < 0) continue;
+
+    const start = snapToGrid(cell.start);
+    if (start + SNAP_TICKS > song.lengthTicks) continue;
+
+    const existing = tiles.find(
+      (tile) => tile.start === start && tile.notes[0] === cell.piece,
+    );
+
+    if (on && !existing) {
+      tiles = [
+        ...tiles,
+        {
+          id: `tile-${nextId++}`,
+          start,
+          length: SNAP_TICKS,
+          velocity: DEFAULT_VELOCITY,
+          notes: [cell.piece],
+        },
+      ];
+      changed = true;
+    } else if (!on && existing) {
+      tiles = tiles.filter((tile) => tile.id !== existing.id);
+      changed = true;
+    }
+  }
+
+  if (!changed) return song;
+  return replaceLine(song, lineId, tiles);
+}

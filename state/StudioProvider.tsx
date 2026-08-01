@@ -21,9 +21,11 @@ import {
   setTileNotes,
   setTileVelocity,
   toggleDrumCell,
+  toggleDrumCells,
 } from "@/lib/score/edit";
 import { buildDemoSong } from "@/lib/score/fixture";
 import { ticksToBarBeat } from "@/lib/score/time";
+import type { DrumCell } from "@/lib/score/edit";
 import type { Song } from "@/lib/score/types";
 import { useSongHistory } from "@/state/useSongHistory";
 
@@ -54,6 +56,13 @@ export type TileEditHandlers = {
     piece: number,
     force?: boolean,
   ) => void;
+  /**
+   * 이어 칠하기 한 스트로크를 한 번에 커밋한다.
+   *
+   * 칸마다 `toggleDrum`을 부르면 하이햇 한 마디(16칸)만 칠해도 실행취소
+   * 히스토리 16칸이 날아가고, 되돌리려면 Ctrl+Z를 열여섯 번 눌러야 한다.
+   */
+  toggleDrumStroke: (lineId: string, cells: DrumCell[], on: boolean) => void;
 };
 
 export type StudioValue = {
@@ -142,9 +151,16 @@ export function StudioProvider({ children }: { children: React.ReactNode }) {
   // 그러면 첫 재생이 initialSong으로 만들어진 엔진을 써서 편집 전 곡이 울린다.
   // getEngine()은 AudioContext를 만들지 않으므로(생성자는 곡과 템포만 저장한다)
   // 여기서 불러도 자동재생 정책에 걸리지 않는다.
+  // isPlaying을 의존성에 둬서 정지로 돌아올 때 다시 보낸다. 이게 없으면
+  // 편집 가드가 세 값(editable, playingRef, engine.playing)이 서로 맞는다는
+  // 데 기대게 되는데, 그중 playingRef는 한 렌더 늦다. Engine.play()는
+  // await 앞에서 동기적으로 playing을 세우므로, 그 창 안에 들어온 편집은
+  // 가드를 통과하고도 setSong에서 거부된다 — 그 뒤로 화면과 엔진이 영원히
+  // 다른 곡을 든다. 정지할 때마다 최신 곡을 다시 보내면 어긋남이 스스로 낫는다.
   useEffect(() => {
+    if (isPlaying) return;
     getEngine().setSong(song);
-  }, [song, getEngine]);
+  }, [song, isPlaying, getEngine]);
 
   // 표시용 위치만 10Hz로 샘플링한다. 매 프레임 값이 아니다.
   useEffect(() => {
@@ -263,6 +279,10 @@ export function StudioProvider({ children }: { children: React.ReactNode }) {
       toggleDrum: (lineId, startTicks, piece, force) => {
         if (playingRef.current) return;
         commitWith((s) => toggleDrumCell(s, lineId, startTicks, piece, force));
+      },
+      toggleDrumStroke: (lineId, cells, on) => {
+        if (playingRef.current) return;
+        commitWith((s) => toggleDrumCells(s, lineId, cells, on));
       },
     }),
     [commitWith],

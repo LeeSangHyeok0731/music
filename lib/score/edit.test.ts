@@ -15,6 +15,7 @@ import {
   setTileVelocity,
   snapToGrid,
   toggleDrumCell,
+  toggleDrumCells,
 } from "@/lib/score/edit";
 import { buildDemoSong } from "@/lib/score/fixture";
 import { DRUM_HIHAT, DRUM_KICK } from "@/lib/score/types";
@@ -439,5 +440,104 @@ describe("변화가 없으면 같은 Song 객체를 돌려준다", () => {
   it("없는 라인 id를 주면", () => {
     const song = simpleSong();
     expect(moveTile(song, "없음", "a", 960)).toBe(song);
+  });
+});
+
+describe("toggleDrumCells", () => {
+  // 이어 칠하기의 커밋 단위. 칸마다 커밋하면 스트로크 하나가 실행취소
+  // 히스토리를 십수 칸씩 잡아먹는다.
+  it("여러 칸을 한 번에 켠다", () => {
+    const next = toggleDrumCells(
+      drumSong(),
+      "D",
+      [
+        { start: 480, piece: DRUM_HIHAT },
+        { start: 600, piece: DRUM_HIHAT },
+        { start: 720, piece: DRUM_HIHAT },
+      ],
+      true,
+    );
+    expect(
+      next.lines[0].tiles.filter((t) => t.notes[0] === DRUM_HIHAT),
+    ).toHaveLength(3);
+  });
+
+  it("한 스트로크 안에서 만든 타일의 id가 서로 겹치지 않는다", () => {
+    // nextTileId는 곡을 훑어 최댓값을 찾는데, 스트로크 중에는 아직 곡에
+    // 반영되지 않으므로 매번 같은 id가 나올 수 있다.
+    const next = toggleDrumCells(
+      drumSong(),
+      "D",
+      [
+        { start: 480, piece: DRUM_HIHAT },
+        { start: 600, piece: DRUM_HIHAT },
+        { start: 720, piece: DRUM_HIHAT },
+      ],
+      true,
+    );
+    const ids = next.lines[0].tiles.map((t) => t.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("켜기 방향은 이미 켜진 칸을 건드리지 않는다", () => {
+    const next = toggleDrumCells(
+      drumSong(),
+      "D",
+      [
+        { start: 0, piece: DRUM_KICK },
+        { start: 480, piece: DRUM_HIHAT },
+      ],
+      true,
+    );
+    expect(next.lines[0].tiles).toHaveLength(2);
+  });
+
+  it("끄기 방향은 켜진 칸만 지운다", () => {
+    const next = toggleDrumCells(
+      drumSong(),
+      "D",
+      [
+        { start: 0, piece: DRUM_KICK },
+        { start: 480, piece: DRUM_HIHAT },
+      ],
+      false,
+    );
+    expect(next.lines[0].tiles).toHaveLength(0);
+  });
+
+  it("곡 밖의 칸은 무시한다", () => {
+    const song = drumSong();
+    const next = toggleDrumCells(
+      song,
+      "D",
+      [
+        { start: -240, piece: DRUM_HIHAT },
+        { start: 1920, piece: DRUM_HIHAT },
+      ],
+      true,
+    );
+    expect(next).toBe(song);
+  });
+
+  it("바뀐 게 없으면 같은 곡 객체를 돌려준다", () => {
+    const song = drumSong();
+    expect(
+      toggleDrumCells(song, "D", [{ start: 0, piece: DRUM_KICK }], true),
+    ).toBe(song);
+  });
+
+  it("정렬 불변식을 유지한다", () => {
+    const next = toggleDrumCells(
+      drumSong(),
+      "D",
+      [
+        { start: 960, piece: DRUM_HIHAT },
+        { start: 240, piece: DRUM_HIHAT },
+        { start: 600, piece: DRUM_HIHAT },
+      ],
+      true,
+    );
+    const starts = next.lines[0].tiles.map((t) => t.start);
+    expect(starts).toEqual([...starts].sort((a, b) => a - b));
   });
 });
