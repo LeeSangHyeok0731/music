@@ -44,14 +44,30 @@ export function defaultNotesFor(instrument: InstrumentId): number[] {
   return [...DEFAULT_NOTES[instrument]];
 }
 
-/** 라인 하나만 갈아끼운 새 Song. 나머지 라인은 참조를 그대로 넘긴다. */
+/**
+ * 라인 하나만 갈아끼운 새 Song. 나머지 라인은 참조를 그대로 넘긴다.
+ *
+ * 결과가 지금과 같으면 **원본 Song을 그대로 돌려준다.** 호출부(실행취소
+ * 히스토리)가 참조 비교로 "아무 일도 없었다"를 판단하기 때문이다. 이게 없으면
+ * 타일을 끌었다가 같은 격자에 도로 놓는 것만으로 히스토리에 변화 없는 항목이
+ * 쌓이고, Ctrl+Z를 눌러도 화면이 안 바뀐다.
+ */
 function replaceLine(song: Song, lineId: string, tiles: Tile[]): Song {
+  const current = song.lines.find((line) => line.id === lineId);
+  const sorted = [...tiles].sort((a, b) => a.start - b.start);
+
+  if (
+    current &&
+    sorted.length === current.tiles.length &&
+    sorted.every((tile, i) => tile === current.tiles[i])
+  ) {
+    return song;
+  }
+
   return {
     ...song,
     lines: song.lines.map((line) =>
-      line.id === lineId
-        ? { ...line, tiles: [...tiles].sort((a, b) => a.start - b.start) }
-        : line,
+      line.id === lineId ? { ...line, tiles: sorted } : line,
     ),
   };
 }
@@ -126,18 +142,17 @@ export function moveTile(
   return replaceLine(
     song,
     lineId,
-    line.tiles.map((tile) =>
-      tile.id === tileId
-        ? {
-            ...tile,
-            start: clampStart(
-              snapToGrid(startTicks),
-              tile.length,
-              song.lengthTicks,
-            ),
-          }
-        : tile,
-    ),
+    line.tiles.map((tile) => {
+      if (tile.id !== tileId) return tile;
+      const start = clampStart(
+        snapToGrid(startTicks),
+        tile.length,
+        song.lengthTicks,
+      );
+      // 값이 같으면 같은 객체를 돌려준다 — replaceLine이 이걸로 "변화 없음"을
+      // 판단하고, 실행취소 히스토리가 빈 항목으로 차는 것을 막는다.
+      return start === tile.start ? tile : { ...tile, start };
+    }),
   );
 }
 
@@ -162,10 +177,8 @@ export function resizeTile(
       // start <= lengthTicks - length를 지키므로 어떤 타일이든
       // lengthTicks - start >= length >= MIN_TILE_LENGTH가 성립한다.
       const snapped = Math.max(MIN_TILE_LENGTH, snapToGrid(lengthTicks));
-      return {
-        ...tile,
-        length: Math.min(snapped, song.lengthTicks - tile.start),
-      };
+      const length = Math.min(snapped, song.lengthTicks - tile.start);
+      return length === tile.length ? tile : { ...tile, length };
     }),
   );
 }
@@ -196,9 +209,13 @@ export function setTileNotes(
   return replaceLine(
     song,
     lineId,
-    line.tiles.map((tile) =>
-      tile.id === tileId ? { ...tile, notes: [...notes] } : tile,
-    ),
+    line.tiles.map((tile) => {
+      if (tile.id !== tileId) return tile;
+      const same =
+        tile.notes.length === notes.length &&
+        tile.notes.every((note, i) => note === notes[i]);
+      return same ? tile : { ...tile, notes: [...notes] };
+    }),
   );
 }
 
@@ -217,7 +234,9 @@ export function setTileVelocity(
     song,
     lineId,
     line.tiles.map((tile) =>
-      tile.id === tileId ? { ...tile, velocity: clamped } : tile,
+      tile.id === tileId && tile.velocity !== clamped
+        ? { ...tile, velocity: clamped }
+        : tile,
     ),
   );
 }

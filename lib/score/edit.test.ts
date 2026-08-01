@@ -401,3 +401,43 @@ describe("addTile은 드럼 라인을 거부한다", () => {
     expect(addTile(song, "D", 480)).toBe(song);
   });
 });
+
+describe("변화가 없으면 같은 Song 객체를 돌려준다", () => {
+  // 실행취소 히스토리가 참조 비교로 "아무 일도 없었다"를 판단한다.
+  // 이게 깨지면 타일을 끌었다가 같은 격자에 도로 놓는 것만으로 히스토리에
+  // 변화 없는 항목이 쌓이고, Ctrl+Z를 눌러도 화면이 안 바뀐다.
+  it("moveTile을 같은 위치로", () => {
+    const song = simpleSong();
+    expect(moveTile(song, "L", "a", 480)).toBe(song);
+  });
+
+  it("moveTile을 같은 격자로 스냅되는 위치로", () => {
+    const song = simpleSong();
+    expect(moveTile(song, "L", "a", 500)).toBe(song);
+  });
+
+  it("resizeTile을 같은 길이로", () => {
+    const song = simpleSong();
+    expect(resizeTile(song, "L", "a", 480)).toBe(song);
+  });
+
+  it("setTileNotes를 같은 음으로", () => {
+    const song = simpleSong();
+    expect(setTileNotes(song, "L", "a", [62, 65])).toBe(song);
+  });
+
+  it("setTileVelocity를 같은 세기로", () => {
+    const song = simpleSong();
+    expect(setTileVelocity(song, "L", "a", 0.5)).toBe(song);
+  });
+
+  it("removeTile에 없는 id를 주면", () => {
+    const song = simpleSong();
+    expect(removeTile(song, "L", "없음")).toBe(song);
+  });
+
+  it("없는 라인 id를 주면", () => {
+    const song = simpleSong();
+    expect(moveTile(song, "없음", "a", 960)).toBe(song);
+  });
+});
