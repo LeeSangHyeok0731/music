@@ -10,7 +10,11 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 ## 현재 상태
 
-`create-next-app` 스캐폴드 단계다. `app/`에 `layout.tsx`, `page.tsx`, `globals.css`, `favicon.ico`만 있고 오디오 코드는 아직 한 줄도 없다. `.claude/rules/*.md`가 설명하는 디렉터리(`lib/audio/`, `lib/score/`, `components/editor/`, `state/`)는 **합의된 설계 방향이지 현존하는 구조가 아니다.** 첫 구현이 실제 구조를 만들면 그 규칙 문서를 사실에 맞게 갱신할 것.
+읽기 전용 타임라인이 동작한다. `lib/score/`(곡 데이터·시간 변환), `lib/audio/`(AudioContext·look-ahead 스케줄러·신스 악기 4종), `state/StudioProvider.tsx`, `components/timeline/`, `components/transport/`가 실제로 존재한다.
+
+하드코딩된 16마디 데모 곡(`lib/score/fixture.ts`)을 라인 위에 타일로 그리고, 재생하면 플레이 플래그가 지나가며 소리가 난다. **아직 편집은 없다** — 타일 생성·이동·길이 조절·삭제, 드럼 칸 토글, 루프, 시크, 줌, 저장/불러오기는 모두 미구현이다. 악기는 전부 오실레이터 신스이고 샘플은 없다.
+
+설계 근거는 `docs/superpowers/specs/2026-07-31-tile-timeline-playback-design.md`에 있다.
 
 ## 절대 규칙
 

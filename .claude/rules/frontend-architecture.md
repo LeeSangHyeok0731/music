@@ -17,9 +17,9 @@ paths:
 
 `AGENTS.md`는 구속력이 있다. 이 Next.js 버전은 흔한 학습 데이터와 다르다. 라우팅, 메타데이터, config, 서버/클라이언트 경계 같은 프레임워크 레벨 코드를 쓰기 전에 `node_modules/next/dist/docs/`의 해당 가이드를 읽는다.
 
-## 현재 상태 vs 계획
+## 디렉터리 구조
 
-**현재 저장소에는 `app/layout.tsx`, `app/page.tsx`, `app/globals.css`밖에 없다.** 아래 구조는 합의된 방향이며 아직 존재하지 않는다. 첫 구현이 실제 디렉터리를 만들면 이 문서를 사실에 맞게 고친다 — 여기 적힌 것을 이미 있는 것처럼 참조하지 않는다.
+아래 구조는 실제로 존재한다. `lib/score/`, `lib/audio/`, `state/`, `components/timeline/`, `components/transport/`가 모두 만들어져 있다. 아직 없는 것은 `components/ui/`(공용 컨트롤)와 `public/samples/`(악기 샘플)뿐이며, 이 둘은 각각 편집 UI 슬라이스와 샘플 음원 슬라이스에서 생긴다.
 
 ```text
 app/                Next.js App Router 엔트리포인트
