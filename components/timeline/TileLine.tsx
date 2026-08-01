@@ -4,7 +4,7 @@ import { memo } from "react";
 
 import { midiToName } from "@/lib/score/notes";
 import type { Line } from "@/lib/score/types";
-import type { TileEditHandlers } from "@/state/StudioProvider";
+import type { TileEditHandlers, TileRef } from "@/state/StudioProvider";
 
 import { PITCHED_LINE_HEIGHT, ROW_DIVIDER, pxToTick, tickToPx } from "./layout";
 import { useTileDrag } from "./useTileDrag";
@@ -33,7 +33,12 @@ function TileLineImpl({
   editable: boolean;
   selectedTileId: string | null;
   edit: TileEditHandlers;
-  onSelect: (tileId: string | null) => void;
+  /**
+   * Provider의 `select`를 그대로 받는다. Timeline에서 lineId를 감싼 클로저를
+   * 만들면 매 렌더마다 새 함수가 되어 memo가 항상 풀린다. 이 컴포넌트가
+   * 이미 line.id를 알고 있으므로 여기서 조립한다.
+   */
+  onSelect: (ref: TileRef | null) => void;
 }) {
   const color = COLORS[line.instrument] ?? COLORS.piano;
 
@@ -73,7 +78,7 @@ function TileLineImpl({
             onPointerDown={(event) => {
               event.stopPropagation();
               if (!editable) return;
-              onSelect(tile.id);
+              onSelect({ lineId: line.id, tileId: tile.id });
               const rect = event.currentTarget.getBoundingClientRect();
               const kind =
                 event.clientX >= rect.right - RESIZE_HANDLE_PX

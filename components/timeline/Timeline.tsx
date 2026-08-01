@@ -55,9 +55,11 @@ export function Timeline() {
                     : null
                 }
                 edit={edit}
-                onSelect={(tileId) =>
-                  select(tileId ? { lineId: line.id, tileId } : null)
-                }
+                // select를 그대로 넘긴다. 여기서 lineId를 감싼 클로저를
+                //만들면 매 렌더마다 새 함수가 되어 memo가 항상 풀린다 —
+                // 재생 중 context가 10Hz로 바뀌므로 타일 전체가 그만큼
+                // 재조정된다. TileLine이 이미 line.id를 알고 있다.
+                onSelect={select}
               />
             ),
           )}
