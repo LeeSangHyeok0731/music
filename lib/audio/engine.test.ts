@@ -164,6 +164,29 @@ describe("Engine 시작 레이스", () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
+  it("dispose는 타이머와 마스터 노드를 정리한다", async () => {
+    // 언마운트 경로다. 여기서 타이머가 남으면 페이지가 살아있는 내내
+    // 25ms마다 도는 인터벌이 엔진 참조를 붙들고 있게 된다.
+    const ctx = new FakeAudioContext();
+    const engine = new Engine(songWithLongTail(), immediateProvider(ctx));
+
+    await engine.play();
+    expect(engine.isPlaying()).toBe(true);
+
+    // disconnect()가 연결 목록을 비우므로 dispose 전에 찾아 둔다
+    const master = ctx.created.find(
+      (node) => node.kind === "gain" && node.connected.includes(ctx.destination),
+    );
+    expect(master).toBeDefined();
+
+    engine.dispose();
+
+    expect(engine.isPlaying()).toBe(false);
+    vi.advanceTimersByTime(5000);
+    expect(vi.getTimerCount()).toBe(0);
+    expect(master!.isDisconnected).toBe(true);
+  });
+
   it("시작에 실패하면 다시 눌렀을 때 실제로 재시도된다", async () => {
     // 실패 후에도 playing이 true로 남으면 다음 play()가 최상단 가드에 걸려
     // 조용히 아무 일도 안 한다. 에러 배너는 "다시 눌러 주세요"라고 하는데

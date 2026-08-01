@@ -3,13 +3,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   FakeAudioContext,
   FakeAudioNode,
+  FakeGainNode,
   asAudioContext,
   asAudioNode,
 } from "@/lib/audio/testing/fake-audio";
 import { VoicePool } from "@/lib/audio/voices";
 
 const FADE_SECONDS = 0.005;
-const RETIRE_MARGIN_MS = 20;
 
 function setup(max?: number) {
   const ctx = new FakeAudioContext();
@@ -19,8 +19,8 @@ function setup(max?: number) {
 }
 
 /** VoicePool이 돌려주는 GainNode를 가짜 타입으로 다시 본다. */
-function asFake(node: unknown): FakeAudioNode {
-  return node as unknown as FakeAudioNode;
+function asFake(node: unknown): FakeGainNode {
+  return node as unknown as FakeGainNode;
 }
 
 describe("VoicePool.acquire", () => {
@@ -62,7 +62,7 @@ describe("VoicePool.acquire", () => {
 });
 
 describe("VoicePool 상한과 voice stealing", () => {
-  it("상한을 넘으면 가장 오래된 보이스를 훔친다", () => {
+  it("상한을 넘으면 가장 오래된 보이스를 페이드아웃시켜 훔친다", () => {
     const { pool } = setup(3);
 
     const first = asFake(pool.acquire(0, 10));
@@ -72,9 +72,13 @@ describe("VoicePool 상한과 voice stealing", () => {
     // 넷째를 요청하면 첫째가 밀려난다
     pool.acquire(0, 10);
 
-    // 페이드가 예약됐는지로 확인한다 — disconnect는 페이드 뒤라 아직이다
-    const gainParam = (first as unknown as { gain: { calls: unknown[] } }).gain;
-    expect(gainParam.calls.length).toBeGreaterThan(0);
+    // 뚝 자르면 클릭이 나므로 반드시 0까지 내려가는 램프여야 한다.
+    // "무언가 호출됐다"가 아니라 페이드의 모양을 본다.
+    expect(first.gain.calls.at(-1)).toMatchObject({
+      method: "linearRampToValueAtTime",
+      value: 0,
+      time: FADE_SECONDS,
+    });
   });
 
   it("상한 안에서는 아무도 훔치지 않는다", () => {
@@ -84,8 +88,7 @@ describe("VoicePool 상한과 voice stealing", () => {
     pool.acquire(0, 10);
     pool.acquire(0, 10);
 
-    const gainParam = (first as unknown as { gain: { calls: unknown[] } }).gain;
-    expect(gainParam.calls).toHaveLength(0);
+    expect(first.gain.calls).toHaveLength(0);
   });
 });
 
@@ -135,12 +138,15 @@ describe("VoicePool 노드 회수 타이밍", () => {
     const voice = asFake(pool.acquire(0, 10));
     pool.releaseAll(when);
 
-    const expectedMs = when * 1000 + FADE_SECONDS * 1000 + RETIRE_MARGIN_MS;
+    // 페이드가 끝나기 전에는 절대 끊으면 안 된다. 여유 마진의 정확한 값은
+    // 구현 사정이므로 단언하지 않는다 — 지켜야 할 것은 "페이드가 끝난 뒤"다.
+    const fadeEndsMs = when * 1000 + FADE_SECONDS * 1000;
 
-    vi.advanceTimersByTime(expectedMs - 5);
+    vi.advanceTimersByTime(fadeEndsMs);
     expect(voice.isDisconnected).toBe(false);
 
-    vi.advanceTimersByTime(10);
+    // 그렇다고 무한정 붙들고 있어도 안 된다
+    vi.advanceTimersByTime(200);
     expect(voice.isDisconnected).toBe(true);
   });
 

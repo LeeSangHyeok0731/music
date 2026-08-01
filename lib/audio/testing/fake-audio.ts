@@ -62,8 +62,14 @@ export class FakeAudioNode {
     return target;
   }
 
+  /**
+   * 인자 없는 disconnect()는 실제 API에서도 나가는 연결을 전부 끊는다.
+   * `connected`를 비워야 "지금 연결돼 있나"를 물을 수 있다 — 호출 이력만
+   * 남기면 끊긴 뒤에도 계속 연결된 것처럼 보인다.
+   */
   disconnect(): void {
     this.disconnectCount += 1;
+    this.connected.length = 0;
   }
 
   /** 한 번이라도 회수됐는지. 노드 누수 검사의 기준. */
@@ -80,10 +86,11 @@ export class FakeGainNode extends FakeAudioNode {
   }
 }
 
-class FakeScheduledSource extends FakeAudioNode {
+export class FakeScheduledSource extends FakeAudioNode {
   startedAt: number | null = null;
   stoppedAt: number | null = null;
   onended: (() => void) | null = null;
+  private ended = false;
 
   start(when: number): void {
     this.startedAt = when;
@@ -91,6 +98,20 @@ class FakeScheduledSource extends FakeAudioNode {
 
   stop(when: number): void {
     this.stoppedAt = when;
+  }
+
+  /**
+   * 예약된 정지 시각이 지났으면 onended를 한 번 발화한다.
+   *
+   * 이걸 흉내내지 않으면 노드 누수를 아예 검사할 수 없다. 이 코드베이스의
+   * 노트 단위 노드는 전부 onended 안에서만 disconnect되기 때문이다 —
+   * onended가 안 오면 모든 노드가 영원히 연결된 것처럼 보인다.
+   */
+  fireEndedIfDue(now: number): void {
+    if (this.ended) return;
+    if (this.stoppedAt === null || this.stoppedAt > now) return;
+    this.ended = true;
+    this.onended?.();
   }
 }
 
@@ -143,16 +164,27 @@ export class FakeAudioContext {
   /** 만들어진 모든 노드. 누수 검사에 쓴다. */
   readonly created: FakeAudioNode[] = [];
 
+  /** start/stop이 예약된 노드. 시계가 지날 때 onended를 발화시킨다. */
+  readonly sources: FakeScheduledSource[] = [];
+
   advanceTo(time: number): void {
     this.currentTime = time;
+    // 실제 API는 예약된 정지 시각이 되면 onended를 부른다. 이 코드베이스는
+    // 거기서만 노드를 회수하므로, 흉내내지 않으면 전부 누수로 보인다.
+    for (const source of this.sources) {
+      source.fireEndedIfDue(time);
+    }
   }
 
   advanceBy(seconds: number): void {
-    this.currentTime += seconds;
+    this.advanceTo(this.currentTime + seconds);
   }
 
   private track<T extends FakeAudioNode>(node: T): T {
     this.created.push(node);
+    if (node instanceof FakeScheduledSource) {
+      this.sources.push(node);
+    }
     return node;
   }
 
