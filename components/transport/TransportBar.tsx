@@ -28,7 +28,10 @@ export function TransportBar() {
           {isPlaying ? "■ 정지" : "▶ 재생"}
         </button>
 
-        <div className="font-mono text-sm tabular-nums text-zinc-300">
+        <div
+          aria-label="현재 위치"
+          className="font-mono text-sm tabular-nums text-zinc-300"
+        >
           {String(position.bar).padStart(3, "0")}:{position.beat}
         </div>
 
@@ -41,6 +44,7 @@ export function TransportBar() {
             step={1}
             value={tempo}
             onChange={(e) => setTempo(Number(e.target.value))}
+            aria-label="템포"
             className="w-40"
           />
           <span className="w-10 font-mono tabular-nums">{tempo}</span>
