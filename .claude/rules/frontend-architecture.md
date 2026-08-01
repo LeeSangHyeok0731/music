@@ -17,18 +17,19 @@ paths:
 
 `AGENTS.md`는 구속력이 있다. 이 Next.js 버전은 흔한 학습 데이터와 다르다. 라우팅, 메타데이터, config, 서버/클라이언트 경계 같은 프레임워크 레벨 코드를 쓰기 전에 `node_modules/next/dist/docs/`의 해당 가이드를 읽는다.
 
-## 현재 상태 vs 계획
+## 디렉터리 구조
 
-**현재 저장소에는 `app/layout.tsx`, `app/page.tsx`, `app/globals.css`밖에 없다.** 아래 구조는 합의된 방향이며 아직 존재하지 않는다. 첫 구현이 실제 디렉터리를 만들면 이 문서를 사실에 맞게 고친다 — 여기 적힌 것을 이미 있는 것처럼 참조하지 않는다.
+아래 구조는 실제로 존재한다. `lib/score/`, `lib/audio/`, `state/`, `components/timeline/`, `components/transport/`가 모두 만들어져 있다. 아직 없는 것은 `components/ui/`(공용 컨트롤)와 `public/samples/`(악기 샘플)뿐이며, 이 둘은 각각 편집 UI 슬라이스와 샘플 음원 슬라이스에서 생긴다.
 
 ```text
-app/                Next.js App Router 엔트리포인트
-lib/score/          곡 데이터 모델 — 노트, 트랙, 패턴, 템포. 순수 TS. Web Audio도 React도 import하지 않는다
-lib/audio/          오디오 엔진 — AudioContext, 트랜스포트, look-ahead 스케줄러, 악기. 순수 TS. React를 import하지 않는다
-components/editor/  피아노롤 / 타임라인 / 트랙 헤더 — 편집 UI
-components/ui/      버튼, 슬라이더, 패널 등 공용 컨트롤
-state/              StudioProvider — 엔진 인스턴스 하나 + React UI 상태 (Context)
-public/samples/     악기 샘플 파일
+app/                    Next.js App Router 엔트리포인트
+lib/score/              곡 데이터 모델 — 노트, 트랙, 패턴, 템포. 순수 TS. Web Audio도 React도 import하지 않는다
+lib/audio/              오디오 엔진 — AudioContext, 트랜스포트, look-ahead 스케줄러, 악기. 순수 TS. React를 import하지 않는다
+components/timeline/    타임라인 — 라인, 타일, 드럼 그리드, 마디선, 플레이 플래그
+components/transport/   트랜스포트 컨트롤 — 재생/정지, 템포, 위치 표시, 메트로놈
+components/ui/          (아직 없음) 버튼, 슬라이더, 패널 등 공용 컨트롤
+state/                  StudioProvider — 엔진 인스턴스 하나 + React UI 상태 (Context)
+public/samples/         (아직 없음) 악기 샘플 파일
 ```
 
 `src/`, feature/entity 레이어, FSD는 두지 않는다. 이 규모에 맞지 않는다.

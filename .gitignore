@@ -49,3 +49,4 @@ _workspace/
 _workspace_*/
 .pr-tmp/
 .claude/command.log
+.superpowers/
