@@ -15,6 +15,23 @@ const MASTER_GAIN = 0.7;
 const START_DELAY = 0.05;
 
 /**
+ * AudioContext를 얻는 통로.
+ *
+ * 엔진이 `getAudioContext`/`ensureRunning`을 직접 부르면 브라우저 없이는
+ * 한 줄도 돌릴 수 없다. play/stop 세션 레이스처럼 눈으로 확인하기 가장 어려운
+ * 로직이 바로 이 경로에 있어서, 가짜를 끼울 수 있게 좁은 인터페이스로 뺀다.
+ */
+export type AudioContextProvider = {
+  get(): AudioContext;
+  ensureRunning(): Promise<void>;
+};
+
+const browserContextProvider: AudioContextProvider = {
+  get: getAudioContext,
+  ensureRunning,
+};
+
+/**
  * 노드 그래프와 재생 상태를 소유한다. React를 import하지 않는다.
  * UI는 명령형 메서드로만 이 레이어를 건드린다.
  */
@@ -28,7 +45,12 @@ export class Engine {
   private instruments = new Map<string, Instrument>();
 
   private scheduler: Scheduler | null = null;
-  private timerId: number | null = null;
+  /**
+   * 브라우저의 setInterval은 number를, node는 Timeout 객체를 돌려준다.
+   * 이 파일은 양쪽에서 다 돌아야 하므로(테스트가 node에서 엔진을 굴린다)
+   * 반환 타입을 그대로 받는다.
+   */
+  private timerId: ReturnType<typeof setInterval> | null = null;
   private playing = false;
 
   /** play() 시작마다 발급하고 stop()에서 무효화하는 세션 번호. */
@@ -41,9 +63,15 @@ export class Engine {
 
   onStop: (() => void) | null = null;
 
-  constructor(song: Song) {
+  private readonly contextProvider: AudioContextProvider;
+
+  constructor(
+    song: Song,
+    contextProvider: AudioContextProvider = browserContextProvider,
+  ) {
     this.song = song;
     this.bpm = song.tempo;
+    this.contextProvider = contextProvider;
   }
 
   isPlaying(): boolean {
@@ -69,8 +97,8 @@ export class Engine {
     const session = ++this.session;
 
     try {
-      const ctx = getAudioContext();
-      await ensureRunning();
+      const ctx = this.contextProvider.get();
+      await this.contextProvider.ensureRunning();
 
       // 내가 시작한 세션이 아직 최신인가. 아니라면 그 사이 stop()이 눌렸거나
       // 더 나중의 play()가 주도권을 가져간 것이므로 여기서 끝낸다. 아직
@@ -94,7 +122,9 @@ export class Engine {
       this.scheduler.start(startTime);
       this.nextClickTick = 0;
 
-      this.timerId = window.setInterval(() => this.onTimer(), TIMER_MS);
+      // window.setInterval이 아니라 전역으로 부른다 — 브라우저에서는 같은
+      // 함수이고, 테스트가 도는 node 환경에는 window가 없다.
+      this.timerId = setInterval(() => this.onTimer(), TIMER_MS);
       this.onTimer();
     } catch (err) {
       // resume()이 거부되거나(자동재생 정책) getAudioContext()가 미지원
@@ -115,7 +145,7 @@ export class Engine {
     this.session += 1;
 
     if (this.timerId !== null) {
-      window.clearInterval(this.timerId);
+      clearInterval(this.timerId);
       this.timerId = null;
     }
     if (this.ctx && this.pool) {
