@@ -350,9 +350,29 @@ describe("toggleDrumCell", () => {
     expect(twice.lines[0].tiles.filter((t) => t.start === 0)).toHaveLength(1);
   });
 
+  it("force=true는 꺼진 칸을 켠다", () => {
+    // 위 테스트는 이미 켜진 칸에서 시작해 "켜기만" 중 no-op 쪽만 본다.
+    // 실제로 켜는 쪽도 확인해야 이어 칠하기가 동작한다.
+    const next = toggleDrumCell(drumSong(), "D", 480, DRUM_HIHAT, true);
+    expect(next.lines[0].tiles.some((t) => t.start === 480)).toBe(true);
+  });
+
   it("force=false는 끄기만 한다", () => {
     const next = toggleDrumCell(drumSong(), "D", 480, DRUM_HIHAT, false);
     expect(next.lines[0].tiles).toHaveLength(1);
+  });
+
+  it("force=false는 켜진 칸을 끈다", () => {
+    const next = toggleDrumCell(drumSong(), "D", 0, DRUM_KICK, false);
+    expect(next.lines[0].tiles).toHaveLength(0);
+  });
+
+  it("바뀐 게 없으면 같은 곡 객체를 그대로 돌려준다", () => {
+    // 호출부가 "아무 일도 없었다"를 참조 비교로 알 수 있어야 한다 —
+    // 실행취소 히스토리에 빈 항목이 쌓이는 것을 막는 장치다.
+    const song = drumSong();
+    expect(toggleDrumCell(song, "D", 0, DRUM_KICK, true)).toBe(song);
+    expect(toggleDrumCell(song, "D", 480, DRUM_HIHAT, false)).toBe(song);
   });
 
   it("곡 끝을 넘는 칸은 만들지 않는다", () => {
@@ -369,5 +389,15 @@ describe("toggleDrumCell", () => {
     );
     const starts = next.lines[0].tiles.map((t) => t.start);
     expect(starts).toEqual([...starts].sort((a, b) => a - b));
+  });
+});
+
+describe("addTile은 드럼 라인을 거부한다", () => {
+  it("드럼 라인에는 타일을 만들지 않는다", () => {
+    // 드럼에는 기본 음이 없어서(defaultNotesFor가 빈 배열) 여기서 만들면
+    // notes가 빈 유령 타일이 된다. 소리도 안 나고 화면에도 안 보이는데
+    // toggleDrumCell은 notes[0]으로 칸을 찾으므로 지울 수도 없다.
+    const song = drumSong();
+    expect(addTile(song, "D", 480)).toBe(song);
   });
 });

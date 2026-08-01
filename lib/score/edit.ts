@@ -83,6 +83,12 @@ export function addTile(song: Song, lineId: string, at: number): Song {
   const line = lineOf(song, lineId);
   if (!line) return song;
 
+  // 드럼 라인은 거부한다. 드럼에는 기본 음이 없어서(defaultNotesFor가 빈
+  // 배열) 여기서 만들면 notes가 비어 있는 유령 타일이 생긴다. 소리도 안
+  // 나고 화면에도 안 보이는데, toggleDrumCell은 notes[0]으로 칸을 찾으므로
+  // 지울 수도 없다.
+  if (line.kind === "drum") return song;
+
   const start = snapToGrid(at);
 
   let source: Tile | null = null;
