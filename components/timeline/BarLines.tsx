@@ -13,8 +13,8 @@ function BarLinesImpl({ width }: { width: number }) {
       style={{
         width,
         backgroundImage: [
-          `repeating-linear-gradient(to right, rgb(255 255 255 / 0.14) 0 1px, transparent 1px ${PX_PER_BAR}px)`,
-          `repeating-linear-gradient(to right, rgb(255 255 255 / 0.05) 0 1px, transparent 1px ${beatWidth}px)`,
+          `repeating-linear-gradient(to right, rgb(255 255 255 / 0.11) 0 1px, transparent 1px ${PX_PER_BAR}px)`,
+          `repeating-linear-gradient(to right, rgb(255 255 255 / 0.035) 0 1px, transparent 1px ${beatWidth}px)`,
         ].join(","),
       }}
     />

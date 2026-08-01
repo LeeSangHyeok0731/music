@@ -7,6 +7,7 @@ import {
   DRUM_ROWS,
   DRUM_ROW_HEIGHT,
   PX_PER_BAR,
+  ROW_DIVIDER,
   tickToPx,
 } from "./layout";
 
@@ -16,12 +17,13 @@ function DrumGridImpl({ line, perBar }: { line: Line; perBar: number }) {
 
   return (
     <div
-      className="relative border-b border-white/10"
+      className="relative"
       style={{
         height: DRUM_LINE_HEIGHT,
+        boxShadow: ROW_DIVIDER,
         backgroundImage: [
-          `repeating-linear-gradient(to right, rgb(255 255 255 / 0.06) 0 1px, transparent 1px ${stepWidth}px)`,
-          `repeating-linear-gradient(to bottom, rgb(255 255 255 / 0.08) 0 1px, transparent 1px ${DRUM_ROW_HEIGHT}px)`,
+          `repeating-linear-gradient(to right, rgb(255 255 255 / 0.04) 0 1px, transparent 1px ${stepWidth}px)`,
+          `repeating-linear-gradient(to bottom, rgb(255 255 255 / 0.06) 0 1px, transparent 1px ${DRUM_ROW_HEIGHT}px)`,
         ].join(","),
       }}
     >
@@ -38,12 +40,12 @@ function DrumGridImpl({ line, perBar }: { line: Line; perBar: number }) {
         return (
           <div
             key={tile.id}
-            className="absolute rounded-sm border border-pink-300/70 bg-pink-500/45"
+            className="absolute rounded-sm border border-rose-300/60 bg-rose-500/45"
             style={{
               left: tickToPx(tile.start, perBar) + 1,
-              top: row * DRUM_ROW_HEIGHT + 3,
+              top: row * DRUM_ROW_HEIGHT + 5,
               width: Math.max(tickToPx(tile.length, perBar) - 2, 4),
-              height: DRUM_ROW_HEIGHT - 6,
+              height: DRUM_ROW_HEIGHT - 10,
             }}
           />
         );

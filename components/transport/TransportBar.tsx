@@ -16,56 +16,65 @@ export function TransportBar() {
     setMetronome,
   } = useStudio();
 
+  const notice = !supported
+    ? "이 브라우저는 Web Audio를 지원하지 않아 재생할 수 없습니다."
+    : error;
+
   return (
-    <div className="flex flex-col gap-2">
-      <div className="flex flex-wrap items-center gap-4 rounded-lg border border-white/15 bg-zinc-900 px-4 py-3">
-        <button
-          type="button"
-          onClick={isPlaying ? stop : play}
-          disabled={!supported}
-          className="w-20 rounded bg-white/10 px-3 py-1.5 text-sm text-zinc-100 hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          {isPlaying ? "■ 정지" : "▶ 재생"}
-        </button>
+    <div className="flex flex-1 flex-wrap items-center gap-5">
+      <button
+        type="button"
+        onClick={isPlaying ? stop : play}
+        disabled={!supported}
+        className="w-[86px] rounded-md border border-white/10 bg-white/[0.07] px-3 py-1.5 text-[13px] text-zinc-100 transition-colors hover:bg-white/[0.13] disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        {isPlaying ? "■ 정지" : "▶ 재생"}
+      </button>
 
-        <div
-          aria-label="현재 위치"
-          className="font-mono text-sm tabular-nums text-zinc-300"
-        >
-          {String(position.bar).padStart(3, "0")}:{position.beat}
-        </div>
-
-        <label className="flex items-center gap-2 text-sm text-zinc-300">
-          <span className="text-zinc-400">♩</span>
-          <input
-            type="range"
-            min={40}
-            max={240}
-            step={1}
-            value={tempo}
-            onChange={(e) => setTempo(Number(e.target.value))}
-            aria-label="템포"
-            className="w-40"
-          />
-          <span className="w-10 font-mono tabular-nums">{tempo}</span>
-        </label>
-
-        <label className="flex items-center gap-2 text-sm text-zinc-300">
-          <input
-            type="checkbox"
-            checked={metronome}
-            onChange={(e) => setMetronome(e.target.checked)}
-          />
-          메트로놈
-        </label>
+      {/* 폭이 흔들리지 않게 tabular-nums + 고정 자릿수 */}
+      <div
+        aria-label="현재 위치"
+        className="font-mono text-[15px] tabular-nums text-zinc-200"
+      >
+        {String(position.bar).padStart(3, "0")}
+        <span className="text-zinc-600">:</span>
+        {position.beat}
       </div>
 
-      {!supported && (
-        <p className="text-sm text-amber-400">
-          이 브라우저는 Web Audio를 지원하지 않아 재생할 수 없습니다.
+      <label className="flex items-center gap-2.5 text-[13px] text-zinc-400">
+        <span className="text-zinc-500">♩</span>
+        <input
+          type="range"
+          min={40}
+          max={240}
+          step={1}
+          value={tempo}
+          onChange={(e) => setTempo(Number(e.target.value))}
+          aria-label="템포"
+          className="w-36 accent-zinc-400"
+        />
+        <span className="w-8 font-mono tabular-nums text-zinc-200">{tempo}</span>
+      </label>
+
+      <label className="flex items-center gap-2 text-[13px] text-zinc-400">
+        <input
+          type="checkbox"
+          checked={metronome}
+          onChange={(e) => setMetronome(e.target.checked)}
+          className="accent-zinc-400"
+        />
+        메트로놈
+      </label>
+
+      {notice && (
+        <p
+          className={`ml-auto text-[13px] ${
+            supported ? "text-red-400" : "text-amber-400"
+          }`}
+        >
+          {notice}
         </p>
       )}
-      {error && <p className="text-sm text-red-400">{error}</p>}
     </div>
   );
 }

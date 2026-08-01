@@ -56,9 +56,10 @@ export function Playflag({
     <div
       ref={flagRef}
       aria-hidden
-      className="pointer-events-none absolute inset-y-0 left-0 z-10 w-0.5 bg-red-500 will-change-transform"
+      className="pointer-events-none absolute inset-y-0 left-0 z-10 w-px bg-red-500 will-change-transform"
     >
-      <div className="absolute -top-0.5 -left-[3px] h-2 w-2 rounded-sm bg-red-500" />
+      {/* 눈금자 위에 얹히는 머리. 플래그가 어디에 있는지 멀리서도 보인다. */}
+      <div className="absolute -top-px -left-[3.5px] h-2 w-2 rotate-45 rounded-[1px] bg-red-500" />
     </div>
   );
 }

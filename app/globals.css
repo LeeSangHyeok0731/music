@@ -1,26 +1,21 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html,
+body {
+  height: 100%;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  /* DAW는 오래 응시하는 도구라 어두운 배경이 기본이다. 팔레트 근거는
+     .claude/rules/ui-conventions.md 참고. */
+  background: #0b0c0f;
+  color: #d4d4d8;
+  /* 스캐폴드는 여기서 Arial을 하드코딩해 layout.tsx가 불러오는 Geist를
+     덮어쓰고 있었다. 변수로 되돌린다. */
+  font-family: var(--font-sans), system-ui, sans-serif;
 }
