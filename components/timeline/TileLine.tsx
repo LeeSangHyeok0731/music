@@ -57,6 +57,9 @@ function TileLineImpl({
       onPointerDown={(event) => {
         // 빈 칸을 눌렀을 때만 여기까지 온다 — 타일은 전파를 멈춘다
         if (!editable) return;
+        // 왼쪽 버튼만. pointerdown은 우클릭에도 오므로, 막지 않으면
+        // 빈 칸에서 우클릭할 때마다 타일이 생기고 그 위에 컨텍스트 메뉴가 뜬다.
+        if (event.button !== 0) return;
         const rect = event.currentTarget.getBoundingClientRect();
         edit.createAt(line.id, pxToTick(event.clientX - rect.left, perBar));
       }}
@@ -74,16 +77,22 @@ function TileLineImpl({
               top: TILE_INSET,
               width: Math.max(tickToPx(tile.length, perBar) - 2, 4),
               height: PITCHED_LINE_HEIGHT - TILE_INSET * 2,
+              // 가로 스크롤이 가능한 스테이지 위에서 가로로 끌면 브라우저가
+              // 패닝으로 가져가며 드래그를 취소한다. 여기서는 우리가 쓴다.
+              touchAction: "none",
             }}
             onPointerDown={(event) => {
               event.stopPropagation();
               if (!editable) return;
+              if (event.button !== 0) return;
               onSelect({ lineId: line.id, tileId: tile.id });
               const rect = event.currentTarget.getBoundingClientRect();
+              // 손잡이가 타일보다 넓으면 안 된다. 최소 길이 타일(16분음표)은
+              // 화면에서 5.5px라, 6px 손잡이가 타일 전체를 덮어 이동이
+              // 아예 불가능해진다. 폭의 절반을 넘지 않게 묶는다.
+              const handle = Math.min(RESIZE_HANDLE_PX, rect.width / 2);
               const kind =
-                event.clientX >= rect.right - RESIZE_HANDLE_PX
-                  ? "resize"
-                  : "move";
+                event.clientX >= rect.right - handle ? "resize" : "move";
               drag.onPointerDown(
                 event,
                 kind,
@@ -94,6 +103,8 @@ function TileLineImpl({
             }}
             onPointerMove={drag.onPointerMove}
             onPointerUp={drag.onPointerUp}
+            onPointerCancel={drag.onPointerCancel}
+            onLostPointerCapture={drag.onPointerCancel}
             onContextMenu={(event) => {
               event.preventDefault();
               if (!editable) return;
