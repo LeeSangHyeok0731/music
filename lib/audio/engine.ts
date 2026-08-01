@@ -1,12 +1,12 @@
 "use client";
 
-import { ticksPerBar } from "@/lib/score/time";
-import { PPQ, type Song } from "@/lib/score/types";
+import { ticksPerBar, ticksPerBeat } from "@/lib/score/time";
+import type { Song } from "@/lib/score/types";
 
 import { ensureRunning, getAudioContext } from "./context";
 import { createInstrument } from "./instruments";
 import { createMetronome, type Metronome } from "./metronome";
-import { Scheduler } from "./scheduler";
+import { LOOKAHEAD_SECONDS, Scheduler } from "./scheduler";
 import type { Instrument, NoteSink } from "./types";
 import { VoicePool } from "./voices";
 
@@ -134,7 +134,7 @@ export class Engine {
     this.metronomeOn = on;
     if (on && this.scheduler) {
       // 지금 지나간 박부터 다시 잡는다 — 과거에 예약하면 한꺼번에 울린다
-      const beat = PPQ * (4 / this.song.timeSignature[1]);
+      const beat = ticksPerBeat(this.song.timeSignature);
       this.nextClickTick =
         Math.ceil(this.scheduler.currentTick() / beat) * beat;
     }
@@ -198,9 +198,10 @@ export class Engine {
   private scheduleClicks(scheduler: Scheduler): void {
     if (!this.ctx || !this.metronome) return;
 
-    const beat = PPQ * (4 / this.song.timeSignature[1]);
+    const beat = ticksPerBeat(this.song.timeSignature);
     const perBar = ticksPerBar(this.song.timeSignature);
-    const horizon = this.ctx.currentTime + 0.1;
+    // 스케줄러의 note lookahead와 같은 값이어야 한다 — LOOKAHEAD_SECONDS 주석 참고.
+    const horizon = this.ctx.currentTime + LOOKAHEAD_SECONDS;
 
     while (this.nextClickTick <= this.song.lengthTicks) {
       const when = scheduler.tickToTime(this.nextClickTick);

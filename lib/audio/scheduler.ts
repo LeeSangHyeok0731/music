@@ -3,6 +3,15 @@ import { PPQ, type Song } from "@/lib/score/types";
 import type { AudioClock, NoteSink } from "./types";
 
 /**
+ * 스케줄러의 note lookahead와 engine.ts의 메트로놈 클릭 horizon이 반드시
+ * 같은 값을 써야 한다. setTempo가 scheduledUntilTick(= 이 lookahead로
+ * 정해지는 경계)에 새 앵커를 놓는데, 둘이 어긋나면 그 경계 부근의 클릭이
+ * 곡 노트와 다른 앵커로 계산돼 템포 변경 때마다 메트로놈이 곡에서 슬쩍
+ * 어긋난다. 하나로 export해서 둘 다 이 값을 읽게 한다.
+ */
+export const LOOKAHEAD_SECONDS = 0.1;
+
+/**
  * look-ahead 스케줄러.
  *
  * 타이머가 얼마나 정확한지에 의존하지 않는다. 타이머의 역할은 "충분히 미리
@@ -44,7 +53,7 @@ export class Scheduler {
     song: Song,
     clock: AudioClock,
     sink: NoteSink,
-    lookaheadSeconds = 0.1,
+    lookaheadSeconds = LOOKAHEAD_SECONDS,
   ) {
     this.song = song;
     this.clock = clock;
