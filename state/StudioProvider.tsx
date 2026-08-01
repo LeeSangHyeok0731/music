@@ -13,9 +13,19 @@ import {
 
 import { isAudioSupported } from "@/lib/audio/context";
 import { Engine } from "@/lib/audio/engine";
+import {
+  addTile,
+  moveTile,
+  removeTile,
+  resizeTile,
+  setTileNotes,
+  setTileVelocity,
+  toggleDrumCell,
+} from "@/lib/score/edit";
 import { buildDemoSong } from "@/lib/score/fixture";
 import { ticksToBarBeat } from "@/lib/score/time";
 import type { Song } from "@/lib/score/types";
+import { useSongHistory } from "@/state/useSongHistory";
 
 const POSITION_SAMPLE_MS = 100;
 
@@ -28,6 +38,23 @@ function subscribeNever() {
 function getServerSupportedSnapshot() {
   return true;
 }
+
+export type TileRef = { lineId: string; tileId: string };
+
+export type TileEditHandlers = {
+  createAt: (lineId: string, tick: number) => void;
+  move: (lineId: string, tileId: string, startTicks: number) => void;
+  resize: (lineId: string, tileId: string, lengthTicks: number) => void;
+  remove: (lineId: string, tileId: string) => void;
+  setNotes: (lineId: string, tileId: string, notes: number[]) => void;
+  setVelocity: (lineId: string, tileId: string, velocity: number) => void;
+  toggleDrum: (
+    lineId: string,
+    startTicks: number,
+    piece: number,
+    force?: boolean,
+  ) => void;
+};
 
 export type StudioValue = {
   song: Song;
@@ -42,15 +69,38 @@ export type StudioValue = {
   setTempo: (bpm: number) => void;
   setMetronome: (on: boolean) => void;
   currentTick: () => number;
+  selection: TileRef | null;
+  select: (ref: TileRef | null) => void;
+  edit: TileEditHandlers;
+  undo: () => void;
+  canUndo: boolean;
+  editable: boolean;
 };
 
 const StudioContext = createContext<StudioValue | null>(null);
 
 export function StudioProvider({ children }: { children: React.ReactNode }) {
-  const song = useMemo(() => buildDemoSong(), []);
+  const initialSong = useMemo(() => buildDemoSong(), []);
+  const {
+    song,
+    commitWith,
+    undo: undoSong,
+    canUndo,
+  } = useSongHistory(initialSong);
+  const [selection, setSelection] = useState<TileRef | null>(null);
+
   const engineRef = useRef<Engine | null>(null);
 
   const [isPlaying, setIsPlaying] = useState(false);
+
+  // 편집 핸들러가 isPlaying을 클로저에 담으면 재생/정지마다 정체성이 바뀌어
+  // 타임라인 memo가 풀린다. ref로 읽는다.
+  // ref 쓰기는 렌더 중에 하면 안 된다(react-hooks/refs) — effect에서 커밋 후에 동기화한다.
+  const playingRef = useRef(false);
+  useEffect(() => {
+    playingRef.current = isPlaying;
+  }, [isPlaying]);
+
   const [tempo, setTempoState] = useState(song.tempo);
   const [metronome, setMetronomeState] = useState(false);
   const [position, setPosition] = useState({ bar: 1, beat: 1 });
@@ -64,7 +114,7 @@ export function StudioProvider({ children }: { children: React.ReactNode }) {
 
   const getEngine = useCallback((): Engine => {
     if (!engineRef.current) {
-      const engine = new Engine(song);
+      const engine = new Engine(initialSong);
       // 곡 끝 도달으로 인한 자동 정지도 사용자가 stop을 누른 것과 같은
       // 결과를 보여줘야 한다 — 안 그러면 재생 헤드가 마지막 샘플 값에
       // 멈춰 있는데 isPlaying만 false가 되어 두 상태가 서로 다른 얘기를 한다.
@@ -75,7 +125,7 @@ export function StudioProvider({ children }: { children: React.ReactNode }) {
       engineRef.current = engine;
     }
     return engineRef.current;
-  }, [song]);
+  }, [initialSong]);
 
   // 언마운트 시 타이머와 노드를 정리한다
   useEffect(() => {
@@ -84,6 +134,11 @@ export function StudioProvider({ children }: { children: React.ReactNode }) {
       engineRef.current = null;
     };
   }, []);
+
+  // 편집은 정지 중에만 일어나므로 다음 play()부터 반영된다.
+  useEffect(() => {
+    engineRef.current?.setSong(song);
+  }, [song]);
 
   // 표시용 위치만 10Hz로 샘플링한다. 매 프레임 값이 아니다.
   useEffect(() => {
@@ -157,6 +212,63 @@ export function StudioProvider({ children }: { children: React.ReactNode }) {
     return engineRef.current?.currentTick() ?? 0;
   }, []);
 
+  const editable = !isPlaying;
+
+  const select = useCallback((ref: TileRef | null) => {
+    setSelection(ref);
+  }, []);
+
+  // 각 핸들러는 편집 함수를 updater로 넘긴다. 현재 곡을 클로저에 담지 않으므로
+  // 이 객체의 정체성이 편집마다 바뀌지 않고, 타임라인 memo가 유지된다.
+  // 재생 중에는 아무것도 하지 않는다.
+  const edit = useMemo<TileEditHandlers>(
+    () => ({
+      createAt: (lineId, tick) => {
+        if (playingRef.current) return;
+        commitWith((s) => addTile(s, lineId, tick));
+      },
+      move: (lineId, tileId, startTicks) => {
+        if (playingRef.current) return;
+        commitWith((s) => moveTile(s, lineId, tileId, startTicks));
+      },
+      resize: (lineId, tileId, lengthTicks) => {
+        if (playingRef.current) return;
+        commitWith((s) => resizeTile(s, lineId, tileId, lengthTicks));
+      },
+      remove: (lineId, tileId) => {
+        if (playingRef.current) return;
+        commitWith((s) => removeTile(s, lineId, tileId));
+        setSelection((prev) => (prev && prev.tileId === tileId ? null : prev));
+      },
+      setNotes: (lineId, tileId, notes) => {
+        if (playingRef.current) return;
+        commitWith((s) => setTileNotes(s, lineId, tileId, notes));
+      },
+      setVelocity: (lineId, tileId, velocity) => {
+        if (playingRef.current) return;
+        commitWith((s) => setTileVelocity(s, lineId, tileId, velocity));
+      },
+      toggleDrum: (lineId, startTicks, piece, force) => {
+        if (playingRef.current) return;
+        commitWith((s) => toggleDrumCell(s, lineId, startTicks, piece, force));
+      },
+    }),
+    [commitWith],
+  );
+
+  const undo = useCallback(() => {
+    const restored = undoSong();
+    if (!restored) return;
+    // 생성을 되돌리면 선택된 타일이 사라진다. 그대로 두면 존재하지 않는
+    // 타일의 팝오버가 떠 있게 된다.
+    setSelection((prev) => {
+      if (!prev) return prev;
+      const line = restored.lines.find((l) => l.id === prev.lineId);
+      const exists = line?.tiles.some((t) => t.id === prev.tileId);
+      return exists ? prev : null;
+    });
+  }, [undoSong]);
+
   const value = useMemo<StudioValue>(
     () => ({
       song,
@@ -171,6 +283,12 @@ export function StudioProvider({ children }: { children: React.ReactNode }) {
       setTempo,
       setMetronome,
       currentTick,
+      selection,
+      select,
+      edit,
+      undo,
+      canUndo,
+      editable,
     }),
     [
       song,
@@ -185,6 +303,12 @@ export function StudioProvider({ children }: { children: React.ReactNode }) {
       setTempo,
       setMetronome,
       currentTick,
+      selection,
+      select,
+      edit,
+      undo,
+      canUndo,
+      editable,
     ],
   );
 
