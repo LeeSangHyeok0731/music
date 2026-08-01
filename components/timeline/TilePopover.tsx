@@ -20,15 +20,21 @@ const LENGTH_CHOICES: Array<{ label: string; ticks: number }> = [
  * 드럼 타일에는 뜨지 않는다 — 격자 칸은 시작 시점과 길이가 이미 정해져 있다.
  */
 export function TilePopover({ perBar }: { perBar: number }) {
-  const { song, selection, select, edit } = useStudio();
+  const { song, selection, select, edit, editable } = useStudio();
   const [adding, setAdding] = useState(false);
+  /** 슬라이더를 끄는 동안의 미리보기. 커밋은 손을 뗄 때 한 번만 한다. */
+  const [velocityDraft, setVelocityDraft] = useState<number | null>(null);
   const ref = useRef<HTMLDivElement>(null);
 
   const line = selection
     ? song.lines.find((l) => l.id === selection.lineId)
     : undefined;
   const tile = line?.tiles.find((t) => t.id === selection?.tileId);
-  const open = Boolean(selection && line && tile && line.kind === "pitched");
+  // 재생 중에는 열지 않는다. 편집 핸들러가 전부 no-op이라 열어두면 조작할 수
+  // 있는 척하면서 아무 일도 안 하는 패널이 된다.
+  const open = Boolean(
+    editable && selection && line && tile && line.kind === "pitched",
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -60,21 +66,25 @@ export function TilePopover({ perBar }: { perBar: number }) {
     lineTop += lineHeight(l.kind);
   }
 
-  // 스테이지 아래쪽 라인이면 위로 뒤집는다. 아래에 뜨면 화면 밖으로 나간다.
-  const stageHeight =
-    RULER_HEIGHT +
-    song.lines.reduce((sum, l) => sum + lineHeight(l.kind), 0);
-  const flipUp = lineTop + PITCHED_LINE_HEIGHT > stageHeight - 160;
-
+  // 항상 타일 아래에 둔다. 위로 뒤집지 않는다.
+  //
+  // 원래는 "아래쪽 라인이면 위로 뒤집는다"였는데, 그 판정이 아래에 남은
+  // 공간이 아니라 아래 라인들의 높이 합을 재고 있었다. 스테이지는 min-h-full
+  // 이라 라인 아래로 화면 끝까지 늘어나 있고, 그 여백은 계산에 잡히지 않는다.
+  // 그래서 4라인짜리 지금 곡에서도 둘째 라인부터 뒤집혔고, 뒤집힌 팝오버는
+  // top이 음수가 되어 스크롤 컨테이너 위로 잘려 나갔다 — 아래로 넘치는 것과
+  // 달리 위로 잘린 내용은 스크롤로도 볼 수 없다.
+  //
+  // 아래로만 두면 넘치더라도 스크롤해서 볼 수 있다. 라인이 아주 많아져
+  // 아래로 밀리는 게 문제가 되면 그때는 스크롤 컨테이너 크기를 실제로 재야지,
+  // 데이터 높이로 추정하면 안 된다.
   return (
     <div
       ref={ref}
       className="absolute z-20 w-[190px] rounded-md border border-white/15 bg-[#16171c] p-2.5 text-[11px] shadow-lg"
       style={{
         left: tickToPx(tile.start, perBar),
-        // 뒤집을 때는 라인 위쪽 모서리를 기준으로 두고 자기 높이만큼 끌어올린다
-        top: flipUp ? lineTop - 4 : lineTop + PITCHED_LINE_HEIGHT + 4,
-        transform: flipUp ? "translateY(-100%)" : undefined,
+        top: lineTop + PITCHED_LINE_HEIGHT + 4,
       }}
       onPointerDown={(event) => event.stopPropagation()}
     >
@@ -141,16 +151,29 @@ export function TilePopover({ perBar }: { perBar: number }) {
 
       <label className="mb-2 flex items-center gap-2 text-zinc-500">
         세기
+        {/*
+          끄는 동안에는 미리보기만 갱신하고 손을 뗄 때 한 번 커밋한다.
+          onChange마다 커밋하면 슬라이더를 한 번 끄는 것만으로 실행취소
+          히스토리 50칸이 1%짜리 항목으로 가득 차 이전 편집이 전부 밀려난다.
+          타일 드래그가 같은 이유로 pointerup에서만 커밋한다.
+        */}
         <input
           type="range"
           min={0}
           max={100}
-          value={Math.round(tile.velocity * 100)}
-          aria-label="세기"
+          value={velocityDraft ?? Math.round(tile.velocity * 100)}
           className="flex-1 accent-zinc-400"
-          onChange={(event) =>
-            edit.setVelocity(line.id, tile.id, Number(event.target.value) / 100)
-          }
+          onChange={(event) => setVelocityDraft(Number(event.target.value))}
+          onPointerUp={() => {
+            if (velocityDraft === null) return;
+            edit.setVelocity(line.id, tile.id, velocityDraft / 100);
+            setVelocityDraft(null);
+          }}
+          onKeyUp={() => {
+            if (velocityDraft === null) return;
+            edit.setVelocity(line.id, tile.id, velocityDraft / 100);
+            setVelocityDraft(null);
+          }}
         />
       </label>
 

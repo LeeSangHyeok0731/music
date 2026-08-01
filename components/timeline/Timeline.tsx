@@ -71,7 +71,16 @@ export function Timeline() {
             ),
           )}
           <Playflag scrollerRef={scrollerRef} perBar={perBar} />
-          <TilePopover perBar={perBar} />
+          {/*
+            선택이 바뀌면 새로 마운트시킨다. 팝오버는 닫혀도 null만 반환할 뿐
+            언마운트되지 않아서, 음 추가 드롭다운을 연 채로 Esc를 누르면 그
+            상태가 남는다. 다음 타일이 입력 모드로 열리고 autoFocus가 포커스를
+            가져간다. key를 바꿔 상태를 초기화한다.
+          */}
+          <TilePopover
+            key={selection ? `${selection.lineId}:${selection.tileId}` : "none"}
+            perBar={perBar}
+          />
         </div>
       </div>
     </div>
