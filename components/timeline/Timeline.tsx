@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 
 import { ticksPerBar } from "@/lib/score/time";
 
@@ -15,11 +15,51 @@ import { TilePopover } from "./TilePopover";
 import { tickToPx } from "./layout";
 
 export function Timeline() {
-  const { song, selection, select, edit, editable } = useStudio();
+  const { song, selection, select, edit, editable, undo } = useStudio();
   const scrollerRef = useRef<HTMLDivElement>(null);
   const perBar = ticksPerBar(song.timeSignature);
   const stageWidth = tickToPx(song.lengthTicks, perBar);
   const bars = Math.ceil(song.lengthTicks / perBar);
+
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      // 입력 필드에 포커스가 있으면 가로채지 않는다. 팝오버의 슬라이더와
+      // 드롭다운이 여기 해당한다 — Backspace를 삼키면 값을 못 지운다.
+      const target = event.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "SELECT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") {
+        event.preventDefault();
+        undo();
+        return;
+      }
+
+      if (!editable) return;
+
+      if (event.key === "Escape") {
+        select(null);
+        return;
+      }
+
+      if (event.key === "Delete" || event.key === "Backspace") {
+        if (!selection) return;
+        // 브라우저 뒤로가기를 막는다
+        event.preventDefault();
+        edit.remove(selection.lineId, selection.tileId);
+      }
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [editable, selection, select, edit, undo]);
 
   return (
     <div className="flex h-full">
