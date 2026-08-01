@@ -22,13 +22,14 @@ paths:
 아래 구조는 실제로 존재한다. `lib/score/`, `lib/audio/`, `state/`, `components/timeline/`, `components/transport/`가 모두 만들어져 있다. 아직 없는 것은 `components/ui/`(공용 컨트롤)와 `public/samples/`(악기 샘플)뿐이며, 이 둘은 각각 편집 UI 슬라이스와 샘플 음원 슬라이스에서 생긴다.
 
 ```text
-app/                Next.js App Router 엔트리포인트
-lib/score/          곡 데이터 모델 — 노트, 트랙, 패턴, 템포. 순수 TS. Web Audio도 React도 import하지 않는다
-lib/audio/          오디오 엔진 — AudioContext, 트랜스포트, look-ahead 스케줄러, 악기. 순수 TS. React를 import하지 않는다
-components/editor/  피아노롤 / 타임라인 / 트랙 헤더 — 편집 UI
-components/ui/      버튼, 슬라이더, 패널 등 공용 컨트롤
-state/              StudioProvider — 엔진 인스턴스 하나 + React UI 상태 (Context)
-public/samples/     악기 샘플 파일
+app/                    Next.js App Router 엔트리포인트
+lib/score/              곡 데이터 모델 — 노트, 트랙, 패턴, 템포. 순수 TS. Web Audio도 React도 import하지 않는다
+lib/audio/              오디오 엔진 — AudioContext, 트랜스포트, look-ahead 스케줄러, 악기. 순수 TS. React를 import하지 않는다
+components/timeline/    타임라인 — 라인, 타일, 드럼 그리드, 마디선, 플레이 플래그
+components/transport/   트랜스포트 컨트롤 — 재생/정지, 템포, 위치 표시, 메트로놈
+components/ui/          (아직 없음) 버튼, 슬라이더, 패널 등 공용 컨트롤
+state/                  StudioProvider — 엔진 인스턴스 하나 + React UI 상태 (Context)
+public/samples/         (아직 없음) 악기 샘플 파일
 ```
 
 `src/`, feature/entity 레이어, FSD는 두지 않는다. 이 규모에 맞지 않는다.
