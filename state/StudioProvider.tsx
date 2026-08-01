@@ -244,7 +244,13 @@ export function StudioProvider({ children }: { children: React.ReactNode }) {
       remove: (lineId, tileId) => {
         if (playingRef.current) return;
         commitWith((s) => removeTile(s, lineId, tileId));
-        setSelection((prev) => (prev && prev.tileId === tileId ? null : prev));
+        // 라인까지 본다. tileId만 보면 곡 전체에서 id가 유일하다는 다른
+        // 모듈의 불변식에 기대게 되고, undo 쪽은 이미 라인까지 확인한다.
+        setSelection((prev) =>
+          prev && prev.lineId === lineId && prev.tileId === tileId
+            ? null
+            : prev,
+        );
       },
       setNotes: (lineId, tileId, notes) => {
         if (playingRef.current) return;
@@ -263,6 +269,12 @@ export function StudioProvider({ children }: { children: React.ReactNode }) {
   );
 
   const undo = useCallback(() => {
+    // 편집 핸들러와 같은 가드가 필요하다. Engine.setSong은 재생 중이면
+    // 무시하는데, 곡을 갱신하는 effect는 song에만 반응하므로 정지해도 다시
+    // 맞춰주지 않는다. 재생 중에 되돌리면 화면은 되돌린 곡을, 엔진은 되돌리기
+    // 전 곡을 든 채로 영원히 갈라진다.
+    if (playingRef.current) return;
+
     const restored = undoSong();
     if (!restored) return;
     // 생성을 되돌리면 선택된 타일이 사라진다. 그대로 두면 존재하지 않는

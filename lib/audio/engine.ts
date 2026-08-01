@@ -177,7 +177,10 @@ export class Engine {
   setSong(song: Song): void {
     if (this.playing) return;
     this.song = song;
-    this.bpm = song.tempo;
+    // bpm은 건드리지 않는다. 생성자에서 곡의 템포로 시작한 뒤로는 setTempo가
+    // 소유한다. 여기서 song.tempo를 다시 넣으면 사용자가 슬라이더로 올려둔
+    // 템포가 편집 한 번에 곡의 원래 값으로 되돌아간다 — 트랜스포트는 160을
+    // 보여주는데 소리는 120으로 나는 상태가 된다.
   }
 
   dispose(): void {
