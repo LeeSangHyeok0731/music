@@ -11,9 +11,13 @@ import {
   nextTileId,
   removeTile,
   resizeTile,
+  setTileNotes,
+  setTileVelocity,
   snapToGrid,
+  toggleDrumCell,
 } from "@/lib/score/edit";
 import { buildDemoSong } from "@/lib/score/fixture";
+import { DRUM_HIHAT, DRUM_KICK } from "@/lib/score/types";
 import type { Song } from "@/lib/score/types";
 
 describe("상수", () => {
@@ -262,5 +266,108 @@ describe("removeTile", () => {
     const song = simpleSong();
     const next = removeTile(song, "L", "없음");
     expect(tilesOf(next)).toHaveLength(1);
+  });
+});
+
+/** 드럼 라인 하나만 있는 1마디 곡. */
+function drumSong(): Song {
+  return {
+    tempo: 120,
+    timeSignature: [4, 4],
+    lengthTicks: 1920,
+    lines: [
+      {
+        id: "D",
+        name: "드럼",
+        kind: "drum",
+        instrument: "drums",
+        tiles: [
+          { id: "k0", start: 0, length: 120, velocity: 0.9, notes: [DRUM_KICK] },
+        ],
+      },
+    ],
+  };
+}
+
+describe("setTileNotes / setTileVelocity", () => {
+  it("음 목록을 바꾼다", () => {
+    const next = setTileNotes(simpleSong(), "L", "a", [60, 63, 67]);
+    expect(tilesOf(next)[0].notes).toEqual([60, 63, 67]);
+  });
+
+  it("빈 음 목록은 무시한다 — 소리도 안 나고 화면에도 안 보인다", () => {
+    const next = setTileNotes(simpleSong(), "L", "a", []);
+    expect(tilesOf(next)[0].notes).toEqual([62, 65]);
+  });
+
+  it("세기를 0..1로 제한한다", () => {
+    expect(tilesOf(setTileVelocity(simpleSong(), "L", "a", 1.5))[0].velocity).toBe(1);
+    expect(tilesOf(setTileVelocity(simpleSong(), "L", "a", -1))[0].velocity).toBe(0);
+  });
+
+  it("원본을 변형하지 않는다", () => {
+    const song = simpleSong();
+    setTileNotes(song, "L", "a", [72]);
+    expect(song.lines[0].tiles[0].notes).toEqual([62, 65]);
+  });
+});
+
+describe("toggleDrumCell", () => {
+  it("빈 칸을 켜면 그 조각의 타일이 생긴다", () => {
+    const next = toggleDrumCell(drumSong(), "D", 480, DRUM_HIHAT);
+    const added = next.lines[0].tiles.find((t) => t.start === 480)!;
+
+    expect(added.notes).toEqual([DRUM_HIHAT]);
+    expect(added.length).toBe(120);
+  });
+
+  it("켜진 칸을 다시 누르면 꺼진다", () => {
+    const next = toggleDrumCell(drumSong(), "D", 0, DRUM_KICK);
+    expect(next.lines[0].tiles).toHaveLength(0);
+  });
+
+  it("같은 칸을 두 번 토글하면 원래 곡과 같아진다", () => {
+    const song = drumSong();
+    const twice = toggleDrumCell(
+      toggleDrumCell(song, "D", 480, DRUM_HIHAT),
+      "D",
+      480,
+      DRUM_HIHAT,
+    );
+    expect(twice.lines[0].tiles.map((t) => [t.start, t.notes[0]])).toEqual(
+      song.lines[0].tiles.map((t) => [t.start, t.notes[0]]),
+    );
+  });
+
+  it("다른 조각은 같은 칸에서 서로 영향을 주지 않는다", () => {
+    const next = toggleDrumCell(drumSong(), "D", 0, DRUM_HIHAT);
+    expect(next.lines[0].tiles).toHaveLength(2);
+  });
+
+  it("force=true는 켜기만 한다 — 이어 칠하기에서 깜빡이지 않는다", () => {
+    const once = toggleDrumCell(drumSong(), "D", 0, DRUM_KICK, true);
+    const twice = toggleDrumCell(once, "D", 0, DRUM_KICK, true);
+    expect(twice.lines[0].tiles.filter((t) => t.start === 0)).toHaveLength(1);
+  });
+
+  it("force=false는 끄기만 한다", () => {
+    const next = toggleDrumCell(drumSong(), "D", 480, DRUM_HIHAT, false);
+    expect(next.lines[0].tiles).toHaveLength(1);
+  });
+
+  it("곡 끝을 넘는 칸은 만들지 않는다", () => {
+    const next = toggleDrumCell(drumSong(), "D", 1920, DRUM_HIHAT);
+    expect(next.lines[0].tiles).toHaveLength(1);
+  });
+
+  it("정렬 불변식을 유지한다", () => {
+    const next = toggleDrumCell(
+      toggleDrumCell(drumSong(), "D", 960, DRUM_HIHAT),
+      "D",
+      480,
+      DRUM_KICK,
+    );
+    const starts = next.lines[0].tiles.map((t) => t.start);
+    expect(starts).toEqual([...starts].sort((a, b) => a - b));
   });
 });

@@ -174,3 +174,91 @@ export function removeTile(song: Song, lineId: string, tileId: string): Song {
     line.tiles.filter((tile) => tile.id !== tileId),
   );
 }
+
+/** 음이 하나도 없는 타일은 소리도 안 나고 화면에도 안 보인다 — 거부한다. */
+export function setTileNotes(
+  song: Song,
+  lineId: string,
+  tileId: string,
+  notes: number[],
+): Song {
+  if (notes.length === 0) return song;
+
+  const line = lineOf(song, lineId);
+  if (!line) return song;
+
+  return replaceLine(
+    song,
+    lineId,
+    line.tiles.map((tile) =>
+      tile.id === tileId ? { ...tile, notes: [...notes] } : tile,
+    ),
+  );
+}
+
+export function setTileVelocity(
+  song: Song,
+  lineId: string,
+  tileId: string,
+  velocity: number,
+): Song {
+  const line = lineOf(song, lineId);
+  if (!line) return song;
+
+  const clamped = Math.max(0, Math.min(1, velocity));
+
+  return replaceLine(
+    song,
+    lineId,
+    line.tiles.map((tile) =>
+      tile.id === tileId ? { ...tile, velocity: clamped } : tile,
+    ),
+  );
+}
+
+/**
+ * 드럼 격자 한 칸을 켜거나 끈다.
+ *
+ * @param force 생략하면 토글. true면 켜기만, false면 끄기만 한다.
+ *   드래그로 이어 칠할 때 토글이면 포인터가 왔다갔다할 때 깜빡인다.
+ */
+export function toggleDrumCell(
+  song: Song,
+  lineId: string,
+  startTicks: number,
+  piece: number,
+  force?: boolean,
+): Song {
+  const line = lineOf(song, lineId);
+  if (!line) return song;
+
+  const start = snapToGrid(startTicks);
+  if (start + SNAP_TICKS > song.lengthTicks) return song;
+
+  const existing = line.tiles.find(
+    (tile) => tile.start === start && tile.notes[0] === piece,
+  );
+  const shouldBeOn = force ?? existing === undefined;
+
+  if (shouldBeOn && existing) return song;
+  if (!shouldBeOn && !existing) return song;
+
+  if (shouldBeOn) {
+    return replaceLine(song, lineId, [
+      ...line.tiles,
+      {
+        id: nextTileId(song),
+        start,
+        length: SNAP_TICKS,
+        velocity: DEFAULT_VELOCITY,
+        notes: [piece],
+      },
+    ]);
+  }
+
+  return replaceLine(
+    song,
+    lineId,
+    line.tiles.filter((tile) => tile.id !== existing!.id),
+  );
+}
