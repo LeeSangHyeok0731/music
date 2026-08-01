@@ -24,7 +24,10 @@ export function Timeline() {
     <div className="flex h-full">
       <LineHeaders lines={song.lines} />
 
-      <div ref={scrollerRef} className="min-w-0 flex-1 overflow-auto">
+      <div
+        ref={scrollerRef}
+        className="timeline-scroll min-w-0 flex-1 overflow-auto"
+      >
         {/*
           minWidth 100%는 뷰포트가 곡보다 넓을 때를 위한 것이다. 없으면
           스테이지가 곡 길이에서 끝나 오른쪽이 빈 배경으로 남는다.
