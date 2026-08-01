@@ -136,9 +136,15 @@ export function StudioProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // 편집은 정지 중에만 일어나므로 다음 play()부터 반영된다.
+  //
+  // engineRef.current?. 로 두면 안 된다. 엔진은 지연 생성이라 재생을 한 번도
+  // 안 누른 상태에서는 아직 없고, 그때 편집하면 이 갱신이 조용히 사라진다.
+  // 그러면 첫 재생이 initialSong으로 만들어진 엔진을 써서 편집 전 곡이 울린다.
+  // getEngine()은 AudioContext를 만들지 않으므로(생성자는 곡과 템포만 저장한다)
+  // 여기서 불러도 자동재생 정책에 걸리지 않는다.
   useEffect(() => {
-    engineRef.current?.setSong(song);
-  }, [song]);
+    getEngine().setSong(song);
+  }, [song, getEngine]);
 
   // 표시용 위치만 10Hz로 샘플링한다. 매 프레임 값이 아니다.
   useEffect(() => {
