@@ -14,7 +14,7 @@ import { TileLine } from "./TileLine";
 import { tickToPx } from "./layout";
 
 export function Timeline() {
-  const { song } = useStudio();
+  const { song, selection, select, edit, editable } = useStudio();
   const scrollerRef = useRef<HTMLDivElement>(null);
   const perBar = ticksPerBar(song.timeSignature);
   const stageWidth = tickToPx(song.lengthTicks, perBar);
@@ -44,7 +44,21 @@ export function Timeline() {
             line.kind === "drum" ? (
               <DrumGrid key={line.id} line={line} perBar={perBar} />
             ) : (
-              <TileLine key={line.id} line={line} perBar={perBar} />
+              <TileLine
+                key={line.id}
+                line={line}
+                perBar={perBar}
+                editable={editable}
+                selectedTileId={
+                  selection && selection.lineId === line.id
+                    ? selection.tileId
+                    : null
+                }
+                edit={edit}
+                onSelect={(tileId) =>
+                  select(tileId ? { lineId: line.id, tileId } : null)
+                }
+              />
             ),
           )}
           <Playflag scrollerRef={scrollerRef} perBar={perBar} />

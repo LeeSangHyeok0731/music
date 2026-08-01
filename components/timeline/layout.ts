@@ -26,6 +26,11 @@ export function tickToPx(tick: number, perBar: number): number {
   return (tick / perBar) * PX_PER_BAR;
 }
 
+/** tickToPx의 역함수. 드래그 거리를 음악적 시간으로 되돌린다. */
+export function pxToTick(px: number, perBar: number): number {
+  return (px / PX_PER_BAR) * perBar;
+}
+
 /** 라인 높이는 데이터에서 계산하지 않고 kind별 상수로 둔다. */
 export function lineHeight(kind: LineKind): number {
   return kind === "drum" ? DRUM_LINE_HEIGHT : PITCHED_LINE_HEIGHT;
