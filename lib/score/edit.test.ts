@@ -119,6 +119,54 @@ describe("addTile", () => {
     expect(added.velocity).toBe(0.5);
   });
 
+  it("왼쪽에 여럿 있으면 가장 가까운 것을 고른다", () => {
+    // 타일이 하나뿐이면 "가장 가까운 것"과 "아무 왼쪽 타일"이 구분되지 않는다.
+    // 셋을 두고 서로 다른 내용을 줘서 실제로 가장 가까운 것을 고르는지 본다.
+    const song: Song = {
+      ...simpleSong(),
+      lines: [
+        {
+          ...simpleSong().lines[0],
+          tiles: [
+            { id: "far", start: 0, length: 120, velocity: 0.1, notes: [50] },
+            { id: "mid", start: 480, length: 240, velocity: 0.2, notes: [55] },
+            { id: "near", start: 960, length: 360, velocity: 0.3, notes: [60] },
+            { id: "right", start: 2400, length: 480, velocity: 0.9, notes: [70] },
+          ],
+        },
+      ],
+    };
+
+    const next = addTile(song, "L", 1440);
+    const added = tilesOf(next).find((t) => t.start === 1440)!;
+
+    expect(added.notes).toEqual([60]);
+    expect(added.length).toBe(360);
+    expect(added.velocity).toBe(0.3);
+  });
+
+  it("클릭 위치와 같은 start의 타일은 왼쪽이 아니다", () => {
+    // 경계 조건. tile.start < start 여야 왼쪽이다.
+    const song: Song = {
+      ...simpleSong(),
+      lines: [
+        {
+          ...simpleSong().lines[0],
+          tiles: [
+            { id: "same", start: 1440, length: 240, velocity: 0.3, notes: [70] },
+          ],
+        },
+      ],
+    };
+
+    const next = addTile(song, "L", 1440);
+    const added = tilesOf(next).find((t) => t.id.startsWith("tile-"))!;
+
+    // 왼쪽에 아무것도 없으므로 기본 타일이다
+    expect(added.notes).toEqual([60, 64, 67]);
+    expect(added.length).toBe(480);
+  });
+
   it("왼쪽에 타일이 없으면 오른쪽을 보지 않고 기본 타일을 쓴다", () => {
     const next = addTile(simpleSong(), "L", 0);
     const added = tilesOf(next).find((t) => t.start === 0)!;

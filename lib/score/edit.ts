@@ -60,7 +60,12 @@ function lineOf(song: Song, lineId: string) {
   return song.lines.find((line) => line.id === lineId);
 }
 
-/** start + length가 곡 끝을 넘지 않도록 start를 뒤로 밀지 않고 앞으로 당긴다. */
+/**
+ * start + length가 곡 끝을 넘지 않도록 start를 뒤로 밀지 않고 앞으로 당긴다.
+ *
+ * 전제: `length <= lengthTicks`. 곡보다 긴 타일은 어디에 놓아도 곡 안에
+ * 들어가지 않으므로 여기서 해결할 수 없다 — 길이를 만드는 쪽에서 막는다.
+ */
 function clampStart(start: number, length: number, lengthTicks: number): number {
   return Math.max(0, Math.min(start, lengthTicks - length));
 }
@@ -86,7 +91,12 @@ export function addTile(song: Song, lineId: string, at: number): Song {
     else break; // tiles는 start 오름차순이다
   }
 
-  const length = source ? source.length : DEFAULT_TILE_LENGTH;
+  // 곡보다 긴 타일은 어디에 놓아도 곡 안에 들어가지 않는다. clampStart가
+  // 해결할 수 없는 경우라 길이를 만드는 여기서 막는다.
+  const length = Math.min(
+    source ? source.length : DEFAULT_TILE_LENGTH,
+    song.lengthTicks,
+  );
   const created: Tile = {
     id: nextTileId(song),
     start: clampStart(start, length, song.lengthTicks),
@@ -139,6 +149,12 @@ export function resizeTile(
     lineId,
     line.tiles.map((tile) => {
       if (tile.id !== tileId) return tile;
+      // 두 클램프의 순서가 중요하다. 곡 끝을 넘지 않는 쪽을 마지막에 두어
+      // 그것이 이긴다 — 스케줄러와 렌더러가 타일이 곡 안에 있다고 전제한다.
+      //
+      // 최소 길이보다 짧아질 걱정은 없다. 이 모듈의 모든 함수가
+      // start <= lengthTicks - length를 지키므로 어떤 타일이든
+      // lengthTicks - start >= length >= MIN_TILE_LENGTH가 성립한다.
       const snapped = Math.max(MIN_TILE_LENGTH, snapToGrid(lengthTicks));
       return {
         ...tile,
