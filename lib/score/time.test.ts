@@ -4,6 +4,7 @@ import { PPQ } from "@/lib/score/types";
 import {
   secondsToTicks,
   ticksPerBar,
+  ticksPerBeat,
   ticksToBarBeat,
   ticksToSeconds,
 } from "@/lib/score/time";
@@ -39,6 +40,20 @@ describe("ticksPerBar", () => {
 
   it("6/8 한 마디는 8분음표 6개다", () => {
     expect(ticksPerBar([6, 8])).toBe(PPQ * 3);
+  });
+});
+
+describe("ticksPerBeat", () => {
+  it("4/4에서 한 박은 4분음표 1개다", () => {
+    expect(ticksPerBeat([4, 4])).toBe(PPQ);
+  });
+
+  it("3/4에서 한 박은 4분음표 1개다", () => {
+    expect(ticksPerBeat([3, 4])).toBe(PPQ);
+  });
+
+  it("6/8에서 한 박은 8분음표 1개다", () => {
+    expect(ticksPerBeat([6, 8])).toBe(PPQ / 2);
   });
 });
 
