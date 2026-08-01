@@ -42,7 +42,13 @@ export function Timeline() {
           <Ruler bars={bars} />
           {song.lines.map((line) =>
             line.kind === "drum" ? (
-              <DrumGrid key={line.id} line={line} perBar={perBar} />
+              <DrumGrid
+                key={line.id}
+                line={line}
+                perBar={perBar}
+                editable={editable}
+                edit={edit}
+              />
             ) : (
               <TileLine
                 key={line.id}
