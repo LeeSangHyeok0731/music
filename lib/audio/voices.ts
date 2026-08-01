@@ -92,7 +92,9 @@ export class VoicePool {
       Math.max(0, (when - this.ctx.currentTime) * 1000) +
       this.FADE_DURATION * 1000 +
       20;
-    window.setTimeout(() => {
+    // window.setTimeout이 아니라 전역 setTimeout으로 부른다. 브라우저에서는
+    // 같은 함수이고, 테스트가 도는 node 환경에는 window가 없다.
+    setTimeout(() => {
       gain.disconnect();
     }, delayMs);
   }
