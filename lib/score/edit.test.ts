@@ -5,11 +5,16 @@ import {
   DEFAULT_VELOCITY,
   MIN_TILE_LENGTH,
   SNAP_TICKS,
+  addTile,
   defaultNotesFor,
+  moveTile,
   nextTileId,
+  removeTile,
+  resizeTile,
   snapToGrid,
 } from "@/lib/score/edit";
 import { buildDemoSong } from "@/lib/score/fixture";
+import type { Song } from "@/lib/score/types";
 
 describe("상수", () => {
   it("스냅은 16분음표(120틱)다", () => {
@@ -77,5 +82,137 @@ describe("defaultNotesFor", () => {
 
   it("드럼은 기본 타일이 없다 — 빈 배열", () => {
     expect(defaultNotesFor("drums")).toEqual([]);
+  });
+});
+
+/** 피아노 라인 하나만 있는 2마디 곡. 편집 결과를 눈으로 따라가기 쉽다. */
+function simpleSong(): Song {
+  return {
+    tempo: 120,
+    timeSignature: [4, 4],
+    lengthTicks: 3840,
+    lines: [
+      {
+        id: "L",
+        name: "피아노",
+        kind: "pitched",
+        instrument: "piano",
+        tiles: [
+          { id: "a", start: 480, length: 480, velocity: 0.5, notes: [62, 65] },
+        ],
+      },
+    ],
+  };
+}
+
+function tilesOf(song: Song): Song["lines"][number]["tiles"] {
+  return song.lines[0].tiles;
+}
+
+describe("addTile", () => {
+  it("왼쪽의 가장 가까운 타일을 복제한다", () => {
+    const next = addTile(simpleSong(), "L", 1440);
+    const added = tilesOf(next).find((t) => t.start === 1440)!;
+
+    expect(added.notes).toEqual([62, 65]);
+    expect(added.length).toBe(480);
+    expect(added.velocity).toBe(0.5);
+  });
+
+  it("왼쪽에 타일이 없으면 오른쪽을 보지 않고 기본 타일을 쓴다", () => {
+    const next = addTile(simpleSong(), "L", 0);
+    const added = tilesOf(next).find((t) => t.start === 0)!;
+
+    expect(added.notes).toEqual([60, 64, 67]);
+    expect(added.length).toBe(480);
+    expect(added.velocity).toBe(0.7);
+  });
+
+  it("클릭 위치를 격자에 붙인다", () => {
+    const next = addTile(simpleSong(), "L", 1450);
+    expect(tilesOf(next).some((t) => t.start === 1440)).toBe(true);
+  });
+
+  it("정렬 불변식을 유지한다", () => {
+    const next = addTile(simpleSong(), "L", 0);
+    const starts = tilesOf(next).map((t) => t.start);
+    expect(starts).toEqual([...starts].sort((a, b) => a - b));
+  });
+
+  it("원본을 변형하지 않는다", () => {
+    const song = simpleSong();
+    addTile(song, "L", 1440);
+    expect(song.lines[0].tiles).toHaveLength(1);
+  });
+
+  it("곡 끝을 넘는 위치에는 끝에 맞춰 넣는다", () => {
+    const next = addTile(simpleSong(), "L", 3840);
+    const added = tilesOf(next).find((t) => t.id.startsWith("tile-"))!;
+    expect(added.start + added.length).toBeLessThanOrEqual(3840);
+  });
+});
+
+describe("moveTile", () => {
+  it("격자에 붙여 옮긴다", () => {
+    const next = moveTile(simpleSong(), "L", "a", 1450);
+    expect(tilesOf(next)[0].start).toBe(1440);
+  });
+
+  it("곡 앞으로 나가면 0으로 클램프한다", () => {
+    const next = moveTile(simpleSong(), "L", "a", -600);
+    expect(tilesOf(next)[0].start).toBe(0);
+  });
+
+  it("곡 끝을 넘으면 끝에서 멈춘다", () => {
+    const next = moveTile(simpleSong(), "L", "a", 3840);
+    const tile = tilesOf(next)[0];
+    expect(tile.start + tile.length).toBe(3840);
+  });
+
+  it("옮긴 뒤에도 정렬이 유지된다", () => {
+    const song = addTile(simpleSong(), "L", 2400);
+    const next = moveTile(song, "L", "a", 3000);
+    const starts = tilesOf(next).map((t) => t.start);
+    expect(starts).toEqual([...starts].sort((a, b) => a - b));
+  });
+
+  it("겹치는 위치로 옮기는 것을 허용한다", () => {
+    const song = addTile(simpleSong(), "L", 2400);
+    const next = moveTile(song, "L", "a", 2400);
+    expect(tilesOf(next).filter((t) => t.start === 2400)).toHaveLength(2);
+  });
+});
+
+describe("resizeTile", () => {
+  it("격자에 붙여 길이를 바꾼다", () => {
+    const next = resizeTile(simpleSong(), "L", "a", 950);
+    expect(tilesOf(next)[0].length).toBe(960);
+  });
+
+  it("최소 길이 아래로는 줄지 않는다", () => {
+    const next = resizeTile(simpleSong(), "L", "a", 10);
+    expect(tilesOf(next)[0].length).toBe(120);
+  });
+
+  it("곡 끝을 넘지 않는다", () => {
+    const next = resizeTile(simpleSong(), "L", "a", 9999);
+    const tile = tilesOf(next)[0];
+    expect(tile.start + tile.length).toBe(3840);
+  });
+});
+
+describe("removeTile", () => {
+  it("해당 타일만 지운다", () => {
+    const song = addTile(simpleSong(), "L", 2400);
+    const next = removeTile(song, "L", "a");
+
+    expect(tilesOf(next)).toHaveLength(1);
+    expect(tilesOf(next)[0].start).toBe(2400);
+  });
+
+  it("없는 id면 곡이 그대로다", () => {
+    const song = simpleSong();
+    const next = removeTile(song, "L", "없음");
+    expect(tilesOf(next)).toHaveLength(1);
   });
 });

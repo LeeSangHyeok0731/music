@@ -56,4 +56,105 @@ function replaceLine(song: Song, lineId: string, tiles: Tile[]): Song {
   };
 }
 
-export { replaceLine as __replaceLine };
+function lineOf(song: Song, lineId: string) {
+  return song.lines.find((line) => line.id === lineId);
+}
+
+/** start + length가 곡 끝을 넘지 않도록 start를 뒤로 밀지 않고 앞으로 당긴다. */
+function clampStart(start: number, length: number, lengthTicks: number): number {
+  return Math.max(0, Math.min(start, lengthTicks - length));
+}
+
+/**
+ * 음정 라인에 타일을 만든다. 드럼 라인에는 쓰지 않는다 — 드럼은
+ * toggleDrumCell로만 만든다.
+ *
+ * 음정 라인에는 세로 축이 없어 클릭 위치가 음높이를 알려주지 않는다.
+ * 그래서 왼쪽의 가장 가까운 타일을 복제한다. 오른쪽은 보지 않는다 —
+ * 보면 라인 맨 앞에 찍을 때마다 뒤쪽 내용이 딸려 와서 "왼쪽에서
+ * 오른쪽으로 깔아나간다"는 예측이 깨진다.
+ */
+export function addTile(song: Song, lineId: string, at: number): Song {
+  const line = lineOf(song, lineId);
+  if (!line) return song;
+
+  const start = snapToGrid(at);
+
+  let source: Tile | null = null;
+  for (const tile of line.tiles) {
+    if (tile.start < start) source = tile;
+    else break; // tiles는 start 오름차순이다
+  }
+
+  const length = source ? source.length : DEFAULT_TILE_LENGTH;
+  const created: Tile = {
+    id: nextTileId(song),
+    start: clampStart(start, length, song.lengthTicks),
+    length,
+    velocity: source ? source.velocity : DEFAULT_VELOCITY,
+    notes: source ? [...source.notes] : defaultNotesFor(line.instrument),
+  };
+
+  return replaceLine(song, lineId, [...line.tiles, created]);
+}
+
+export function moveTile(
+  song: Song,
+  lineId: string,
+  tileId: string,
+  startTicks: number,
+): Song {
+  const line = lineOf(song, lineId);
+  if (!line) return song;
+
+  return replaceLine(
+    song,
+    lineId,
+    line.tiles.map((tile) =>
+      tile.id === tileId
+        ? {
+            ...tile,
+            start: clampStart(
+              snapToGrid(startTicks),
+              tile.length,
+              song.lengthTicks,
+            ),
+          }
+        : tile,
+    ),
+  );
+}
+
+export function resizeTile(
+  song: Song,
+  lineId: string,
+  tileId: string,
+  lengthTicks: number,
+): Song {
+  const line = lineOf(song, lineId);
+  if (!line) return song;
+
+  return replaceLine(
+    song,
+    lineId,
+    line.tiles.map((tile) => {
+      if (tile.id !== tileId) return tile;
+      const snapped = Math.max(MIN_TILE_LENGTH, snapToGrid(lengthTicks));
+      return {
+        ...tile,
+        length: Math.min(snapped, song.lengthTicks - tile.start),
+      };
+    }),
+  );
+}
+
+export function removeTile(song: Song, lineId: string, tileId: string): Song {
+  const line = lineOf(song, lineId);
+  if (!line) return song;
+
+  return replaceLine(
+    song,
+    lineId,
+    line.tiles.filter((tile) => tile.id !== tileId),
+  );
+}
