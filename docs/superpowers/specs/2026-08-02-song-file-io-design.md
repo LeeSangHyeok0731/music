@@ -213,7 +213,9 @@ loadSong: (song: Song) => void
 
 `song`이 바뀌면 기존 effect(`StudioProvider.tsx:160`)가 `getEngine().setSong(song)`을 부른다. 별도 처리가 필요 없다.
 
-**3번이 2번보다 뒤에 있어야 한다.** `setTempo`를 먼저 부르면 `replaceWithoutHistory`가 옛 곡의 템포를 갱신하고, 그 직후 `commitWith`가 그걸 통째로 덮어쓴다.
+**2번과 3번의 순서는 상관없다.** `commitWith`는 React 상태를, `Engine.setTempo`는 엔진의 `bpm`을 건드린다 — 서로 다른 곳이다. 다만 3번을 빼먹으면 안 된다. 곡을 갱신하는 effect는 `setSong`만 부르고 `setSong`은 `bpm`을 건드리지 않으므로, 불러온 곡의 템포가 엔진에 영원히 반영되지 않는다.
+
+같은 이유로 **`undo`도 `getEngine().setTempo(restored.tempo)`를 불러야 한다.** 템포가 곡 안에 있으므로 되돌리기는 템포도 되돌리는데, 엔진은 그걸 모른다.
 
 ## UI
 

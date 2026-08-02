@@ -1004,8 +1004,12 @@ Modify `state/StudioProvider.tsx` — `undo` 정의 위에 추가:
       // 않는다. 재생 중에 불러오면 화면과 엔진이 영원히 갈라진다.
       if (playingRef.current) return;
 
-      // commitWith가 먼저다. setTempo를 먼저 부르면 replaceWithoutHistory가
-      // 옛 곡의 템포를 갱신하고, 그 직후 commitWith가 그걸 통째로 덮어쓴다.
+      // 두 줄은 서로 다른 곳을 건드린다 — commitWith는 React 상태를,
+      // Engine.setTempo는 엔진의 bpm을. 순서는 상관없다.
+      //
+      // 엔진 쪽을 빼먹으면 안 된다. 곡을 갱신하는 effect는 setSong만 부르고
+      // setSong은 bpm을 건드리지 않으므로(engine.ts의 주석 참고), 불러온 곡의
+      // 템포가 엔진에 영원히 반영되지 않는다.
       commitWith(() => loaded);
       getEngine().setTempo(loaded.tempo);
 
