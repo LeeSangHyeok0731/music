@@ -189,6 +189,8 @@ StudioProvider        tempo useState 제거. song.tempo를 그대로 노출
 
 `engine.ts`의 `setSong`은 그대로 둔다. 여전히 `bpm`을 건드리지 않고, `StudioProvider`가 필요할 때 `setTempo`를 명시적으로 부른다. 주석의 우려("편집 한 번에 원래 값으로 되돌아감")는 `setSong`이 `bpm`을 무시하는 한 계속 막혀 있다.
 
+**보정(전체 브랜치 리뷰, 2026-08-02):** 위 설계는 `pastRef`를 그대로 두는 것만으로 충분하다고 가정했지만, 실제로는 부족했다. 과거 스냅샷은 각자 저장된 시점의 옛 템포 값을 그대로 들고 있어서, 타일을 찍고 → 템포를 바꾸고 → `Ctrl+Z`를 누르면 타일만이 아니라 **템포도 그 스냅샷이 저장됐던 시점의 값으로 되돌아갔다.** 실행취소인데 되돌리지 않은 값(템포)까지 조용히 되돌리는, 사용자가 방금 한 편집이 사라지는 결함이었다. 그래서 `replaceWithoutHistory`(`state/useSongHistory.ts`)는 새 항목을 쌓지 않는 것에 더해 **`pastRef`에 이미 쌓인 스냅샷 전체에도 같은 updater를 적용**하도록 고쳤다(새 배열을 만들어서 — 제자리 변형 금지). 이 방식은 템포처럼 **곡 전체에 적용되는 설정**에서만 맞다. 타일 추가/삭제 같은 구조적 편집에 썼다면 과거 스냅샷의 그 시점 값 자체가 사라져 Ctrl+Z의 의미가 없어진다. 불러오기(`loadSong`)를 되돌릴 때 템포가 정확히 복원되는 이유는 그대로다 — `loadSong`은 `commitWith`를 쓰고, `replaceWithoutHistory`는 `commitWith`가 쌓은 스택에 손대지 않는다.
+
 ### 렌더 비용
 
 `{ ...song, tempo: bpm }`은 `lines` 배열 참조를 그대로 넘긴다. 각 `line` 객체도 동일하므로 `TileLine`(`components/timeline/TileLine.tsx:151`의 `memo`)과 `DrumGrid`의 memo가 유지된다.
@@ -211,11 +213,13 @@ loadSong: (song: Song) => void
 4. `setSelection(null)` — 불러온 곡에 이전 선택이 있을 리 없다. 안 지우면 존재하지 않는 타일의 팝오버가 뜬다
 5. `setError(null)` — 이전 실패 문구를 지운다
 
-`song`이 바뀌면 기존 effect(`StudioProvider.tsx:160`)가 `getEngine().setSong(song)`을 부른다. 별도 처리가 필요 없다.
+`song`이 바뀌면 기존 effect(`StudioProvider.tsx:166`)가 `getEngine().setSong(song)`을 부른다. 별도 처리가 필요 없다.
 
 **2번과 3번의 순서는 상관없다.** `commitWith`는 React 상태를, `Engine.setTempo`는 엔진의 `bpm`을 건드린다 — 서로 다른 곳이다. 다만 3번을 빼먹으면 안 된다. 곡을 갱신하는 effect는 `setSong`만 부르고 `setSong`은 `bpm`을 건드리지 않으므로, 불러온 곡의 템포가 엔진에 영원히 반영되지 않는다.
 
 같은 이유로 **`undo`도 `getEngine().setTempo(restored.tempo)`를 불러야 한다.** 템포가 곡 안에 있으므로 되돌리기는 템포도 되돌리는데, 엔진은 그걸 모른다.
+
+**보정(전체 브랜치 리뷰, 2026-08-02):** `loadSong`이 들여오는 곡은 템포만 다른 게 아니라 **라인 구성**(라인 `id`, `instrument`)도 이전 곡과 다를 수 있다 — 손으로 고친 파일이 라인 `id`를 바꾸거나 `instrument`를 바꿔서 저장했을 수 있기 때문이다. `engine.ts`의 악기 맵(`instruments: Map<string, Instrument>`)은 원래 최초 `play()` 시점에 `this.song.lines`로 한 번만 채워지고 `setSong`은 그 맵을 건드리지 않았는데, 이건 "라인 구성 자체는 편집으로 바뀌지 않는다"는 전제 위에 있었다 — 파일 불러오기가 정확히 그 전제를 깬다. 라인 `id`가 바뀐 채로 재생하면 `sink.schedule`의 `this.instruments.get(lineId)?.play(...)`가 새 `lineId`를 찾지 못해 그 라인 전체가 예외도 로그도 없이 무음이 되고, `instrument`만 바뀌면 옛 악기로 계속 울린다. `setSong`은 이제 라인 구성(순서·`id`·`instrument`)이 바뀐 걸 감지하면(`sameLineComposition` 헬퍼) 악기 맵을 그 자리에서 다시 채운다. 그래프가 아직 없으면(한 번도 `play()`하지 않았거나 `dispose()`된 뒤라면) 다시 채울 게 없으므로 손대지 않는다 — 다음 `buildGraph()`가 새 `song.lines`로 정확히 채운다.
 
 ## UI
 

@@ -874,7 +874,7 @@ git commit -m "feat(state): 히스토리를 건너뛰는 곡 교체 함수를 �
 
 - [ ] **Step 1: 훅에서 새 함수를 꺼낸다**
 
-Modify `state/StudioProvider.tsx:93-98`:
+Modify `state/StudioProvider.tsx:97-103` (구현 완료 후 실제 위치 — 작성 당시의 `:93-98`에서 그 사이 추가된 줄만큼 밀렸다):
 
 ```ts
   const {
@@ -888,7 +888,7 @@ Modify `state/StudioProvider.tsx:93-98`:
 
 - [ ] **Step 2: tempo state를 제거한다**
 
-Modify `state/StudioProvider.tsx:113` — 이 줄을 지운다:
+Modify `state/StudioProvider.tsx:113`(작성 당시 위치; 구현 완료 후에는 지워진 줄 자리에 남은 주석이 `:118-119`에 있다) — 이 줄을 지운다:
 
 ```ts
   const [tempo, setTempoState] = useState(song.tempo);
@@ -903,7 +903,7 @@ Modify `state/StudioProvider.tsx:113` — 이 줄을 지운다:
 
 - [ ] **Step 3: setTempo가 곡을 갱신하게 한다**
 
-Modify `state/StudioProvider.tsx:217-223`:
+Modify `state/StudioProvider.tsx:217-223`(작성 당시 위치; 구현 완료 후에는 `:223-230`이다):
 
 ```ts
   const setTempo = useCallback(
@@ -1022,7 +1022,7 @@ Modify `state/StudioProvider.tsx` — `undo` 정의 위에 추가:
   );
 ```
 
-`song`이 바뀌면 기존 effect(`StudioProvider.tsx:160`)가 `getEngine().setSong(song)`을 부른다. 여기서 따로 부르지 않는다.
+`song`이 바뀌면 기존 effect(`StudioProvider.tsx:166`, 작성 당시 위치는 `:160`)가 `getEngine().setSong(song)`을 부른다. 여기서 따로 부르지 않는다.
 
 - [ ] **Step 3: value에 넣는다**
 
@@ -1279,3 +1279,15 @@ Expected: `더 새로운 버전에서 만든 파일입니다.`
 - [ ] **Step 4: 문제가 없으면 종료**
 
 모두 통과하면 이 슬라이스는 끝이다. 실패한 항목이 있으면 해당 태스크로 돌아간다.
+
+---
+
+### 사후 보정 — 전체 브랜치 리뷰 (2026-08-02)
+
+이 태스크들이 전부 끝나고 병합 전 최종 리뷰에서 위 계획이 놓친 결함 두 개가 나왔다. 계획 자체는 아래처럼 고쳐 반영한다 — 원래 태스크 본문은 실행 당시 그대로 두고, 여기 추가한다.
+
+**Task 3(`replaceWithoutHistory`)이 놓친 것:** 새 항목을 히스토리에 안 쌓는 것만 구현하고, 이미 쌓인 과거 스냅샷은 그대로 뒀다. 그런데 과거 스냅샷도 각자 그 시점의 옛 템포 값을 갖고 있어서, "타일을 찍고 → 템포를 바꾸고 → `Ctrl+Z`"를 하면 타일과 **함께 템포도** 그 스냅샷이 저장된 시점 값으로 되돌아갔다 — 방금 바꾼 템포가 조용히 사라지는 결함이다. `replaceWithoutHistory`는 이제 `pastRef.current`의 모든 스냅샷에도 같은 updater를 적용한다(새 배열을 만들어서). 이 방식은 템포처럼 곡 전체에 적용되는 설정에서만 맞다 — 구조적 편집에는 쓰면 안 된다.
+
+**Task 5(`loadSong`)이 놓친 것:** `engine.ts`의 악기 맵(`instruments`)이 최초 `play()` 이후로는 절대 안 바뀐다는 전제를 그대로 뒀다. 그 전제는 "라인 구성이 편집으로 바뀌지 않는다"는 데 있었는데, `loadSong`이 정확히 그 전제를 깬다 — 불러온 파일의 라인 `id`나 `instrument`가 이전 곡과 다를 수 있다. 라인 `id`가 바뀌면 그 라인이 예외 없이 조용히 무음이 되고, `instrument`만 바뀌면 옛 악기로 계속 울린다. `lib/audio/engine.ts`의 `setSong`이 이제 라인 구성(순서·`id`·`instrument`) 변화를 감지해 악기 맵을 다시 채운다(`sameLineComposition` 헬퍼, 그래프가 아직 없으면 손대지 않는다).
+
+두 보정 모두 `lib/audio/engine.test.ts`와 `state/useSongHistory.ts`의 갱신된 doc 코멘트로 확인할 수 있다. `replaceWithoutHistory`는 여전히 훅 안의 함수라 자동 테스트 대상이 아니다 — 계약은 doc 코멘트와 수동 검증으로 남긴다.
