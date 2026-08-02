@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import { MIN_TILE_LENGTH } from "@/lib/score/edit";
-import { FILE_FORMAT, FILE_VERSION, SongFileSchema } from "@/lib/score/schema";
+import {
+  FILE_FORMAT,
+  FILE_VERSION,
+  MAX_LENGTH_TICKS,
+  SongFileSchema,
+} from "@/lib/score/schema";
 import { buildDemoSong } from "@/lib/score/fixture";
 
 /** 유효한 파일 하나. 각 테스트가 필요한 부분만 덮어쓴다. */
@@ -111,6 +116,46 @@ describe("SongFileSchema — 거부", () => {
       { id: "dup", start: 480, length: 480, velocity: 0.7, notes: [64] },
     ];
     expect(SongFileSchema.safeParse(file).success).toBe(false);
+  });
+
+  it("kind가 drum인데 instrument가 drums가 아니면 거부한다", () => {
+    // addTile은 defaultNotesFor(instrument)로 기본 노트를 채우는데,
+    // defaultNotesFor는 drums에만 빈 배열을 준다. kind만 drum이고 instrument는
+    // 다른 값이면 addTile이 notes: []인 유령 타일을 만들 수 있다.
+    const file = validFile();
+    const line = file.song.lines[0];
+    line.kind = "drum";
+    line.instrument = "piano";
+    expect(SongFileSchema.safeParse(file).success).toBe(false);
+  });
+
+  it("instrument가 drums인데 kind가 drum이 아니면 거부한다", () => {
+    const file = validFile();
+    const line = file.song.lines[0];
+    line.kind = "pitched";
+    line.instrument = "drums";
+    expect(SongFileSchema.safeParse(file).success).toBe(false);
+  });
+
+  it("kind와 instrument가 서로 맞으면 통과한다", () => {
+    const file = validFile();
+    const drumLine = file.song.lines.find((l) => l.instrument === "drums")!;
+    expect(drumLine.kind).toBe("drum");
+    expect(SongFileSchema.safeParse(file).success).toBe(true);
+  });
+
+  it("lengthTicks가 상한을 넘으면 거부한다", () => {
+    // Ruler/BarLines는 마디 수만큼 그린다 — 상한이 없으면 손으로 고친 값
+    // 하나로 탭이 멈춘다.
+    const file = validFile();
+    file.song.lengthTicks = MAX_LENGTH_TICKS + 1;
+    expect(SongFileSchema.safeParse(file).success).toBe(false);
+  });
+
+  it("lengthTicks가 상한과 정확히 같으면 통과한다", () => {
+    const file = validFile();
+    file.song.lengthTicks = MAX_LENGTH_TICKS;
+    expect(SongFileSchema.safeParse(file).success).toBe(true);
   });
 
   it("라인이 달라 타일 id가 겹치는 것은 허용한다", () => {

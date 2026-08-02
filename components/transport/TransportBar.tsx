@@ -2,6 +2,7 @@
 
 import { useRef } from "react";
 
+import { MAX_TEMPO, MIN_TEMPO } from "@/lib/score/schema";
 import { parseSong } from "@/lib/score/serialize";
 import { useStudio } from "@/state/StudioProvider";
 
@@ -124,8 +125,8 @@ export function TransportBar() {
         <span className="text-zinc-500">♩</span>
         <input
           type="range"
-          min={40}
-          max={240}
+          min={MIN_TEMPO}
+          max={MAX_TEMPO}
           step={1}
           value={tempo}
           onChange={(e) => setTempo(Number(e.target.value))}
