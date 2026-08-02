@@ -30,11 +30,24 @@ export type SongHistory = {
    */
   commitWith: (updater: (song: Song) => Song) => void;
   /**
-   * 히스토리에 쌓지 않고 곡을 교체한다.
+   * 히스토리에 쌓지 않고 곡을 교체하며, 이미 쌓인 스냅샷에도 같은 updater를
+   * 적용한다.
    *
    * 템포 슬라이더처럼 드래그 한 번에 수십 번 불리는 조작을 위한 것이다.
    * commitWith로 처리하면 Ctrl+Z 50칸이 전부 템포로 채워져 실제 편집을
    * 되돌릴 수 없게 된다.
+   *
+   * 새 항목을 쌓지 않는 것만으로는 부족하다 — 과거 스냅샷은 각자 그 시점의
+   * 옛 템포를 그대로 들고 있으므로, 손대지 않으면 타일을 편집하고 되돌릴
+   * 때마다 템포가 그 스냅샷이 저장됐던 시점의 값으로 슬쩍 되돌아간다.
+   * 그래서 `pastRef`의 모든 항목에도 같은 updater를 적용해(새 배열을 만들어)
+   * "지금 템포"가 과거 스냅샷 전체에서 일관되게 유지되도록 다시 쓴다.
+   *
+   * 이 방식은 템포처럼 **곡 전체에 적용되는 설정**에서만 맞다 — 그 값은
+   * 어느 스냅샷을 봐도 "당시의 값"이 아니라 "지금의 값"이어야 하기 때문이다.
+   * 타일 추가/삭제 같은 **구조적 편집**에는 절대 쓰면 안 된다. 과거 스냅샷의
+   * 타일 구성까지 지금 값으로 덮어쓰면 그 시점으로 되돌아간다는 Ctrl+Z의
+   * 의미 자체가 사라진다.
    */
   replaceWithoutHistory: (updater: (song: Song) => Song) => void;
   /** 되돌린 곡을 반환한다. 되돌릴 게 없으면 null. */
@@ -66,9 +79,16 @@ export function useSongHistory(initial: Song): SongHistory {
     const next = updater(songRef.current);
     if (next === songRef.current) return;
 
-    // pastRef를 건드리지 않는다. 이게 commitWith와의 유일한 차이다.
+    // 새 항목을 쌓지 않는 것 — 이게 commitWith와의 첫 번째 차이다.
     songRef.current = next;
     setSong(next);
+
+    // 이미 쌓인 스냅샷에도 같은 updater를 적용한다 — 두 번째 차이이자
+    // 이 함수의 핵심이다. 원본 배열을 변형하지 않고 새 배열을 만든다.
+    // updater가 각 스냅샷을 그대로 돌려주면(참조 동일) 그 자리도 참조가
+    // 유지된다 — updater 자신의 계약이지 여기서 따로 보존할 것은 없다.
+    pastRef.current = pastRef.current.map(updater);
+    setPast(pastRef.current);
   }, []);
 
   const undo = useCallback((): Song | null => {
