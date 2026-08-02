@@ -36,7 +36,7 @@ const browserContextProvider: AudioContextProvider = {
  * UI는 명령형 메서드로만 이 레이어를 건드린다.
  */
 export class Engine {
-  private readonly song: Song;
+  private song: Song;
 
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
@@ -168,6 +168,19 @@ export class Engine {
       this.nextClickTick =
         Math.ceil(this.scheduler.currentTick() / beat) * beat;
     }
+  }
+
+  /**
+   * 곡을 갈아끼운다. 편집은 정지 중에만 일어나므로 다음 play()부터 반영된다.
+   * 재생 중에 부르면 이미 예약된 구간과 새 곡이 어긋나므로 무시한다.
+   */
+  setSong(song: Song): void {
+    if (this.playing) return;
+    this.song = song;
+    // bpm은 건드리지 않는다. 생성자에서 곡의 템포로 시작한 뒤로는 setTempo가
+    // 소유한다. 여기서 song.tempo를 다시 넣으면 사용자가 슬라이더로 올려둔
+    // 템포가 편집 한 번에 곡의 원래 값으로 되돌아간다 — 트랜스포트는 160을
+    // 보여주는데 소리는 120으로 나는 상태가 된다.
   }
 
   dispose(): void {

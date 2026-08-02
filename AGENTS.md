@@ -10,11 +10,15 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 ## 현재 상태
 
-읽기 전용 타임라인이 동작한다. `lib/score/`(곡 데이터·시간 변환), `lib/audio/`(AudioContext·look-ahead 스케줄러·신스 악기 4종), `state/StudioProvider.tsx`, `components/timeline/`, `components/transport/`가 실제로 존재한다.
+타임라인에서 곡을 편집하고 재생할 수 있다. `lib/score/`(곡 데이터·시간 변환·편집 함수), `lib/audio/`(AudioContext·look-ahead 스케줄러·신스 악기 4종), `state/`, `components/timeline/`, `components/transport/`가 실제로 존재한다.
 
-하드코딩된 16마디 데모 곡(`lib/score/fixture.ts`)을 라인 위에 타일로 그리고, 재생하면 플레이 플래그가 지나가며 소리가 난다. **아직 편집은 없다** — 타일 생성·이동·길이 조절·삭제, 드럼 칸 토글, 루프, 시크, 줌, 저장/불러오기는 모두 미구현이다. 악기는 전부 오실레이터 신스이고 샘플은 없다.
+16마디 데모 곡(`lib/score/fixture.ts`)으로 시작해서, 타일을 찍고 옮기고 늘리고 지울 수 있다. 드럼은 격자 칸 토글로 만들고 드래그로 이어 칠한다. 타일을 클릭하면 음·세기·길이를 고치는 팝오버가 뜬다. `Ctrl+Z`로 되돌린다.
 
-설계 근거는 `docs/superpowers/specs/2026-07-31-tile-timeline-playback-design.md`에 있다.
+**편집은 정지 중에만 된다** — 재생 중 타임라인은 읽기 전용이다. 스케줄러의 커서가 `tiles[]` 인덱스라 재생 중 곡이 바뀌면 노트가 조용히 누락된다.
+
+아직 없는 것: 다시실행, 다중 선택, 복사/붙여넣기, 라인 추가/삭제, 루프, 시크, 줌, 저장/불러오기, 샘플 음원. 악기는 전부 오실레이터 신스다.
+
+설계 근거는 `docs/superpowers/specs/`에 있다.
 
 ## 절대 규칙
 
