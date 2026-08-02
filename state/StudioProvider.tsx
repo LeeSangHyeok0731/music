@@ -93,6 +93,7 @@ export function StudioProvider({ children }: { children: React.ReactNode }) {
   const {
     song,
     commitWith,
+    replaceWithoutHistory,
     undo: undoSong,
     canUndo,
   } = useSongHistory(initialSong);
@@ -110,7 +111,8 @@ export function StudioProvider({ children }: { children: React.ReactNode }) {
     playingRef.current = isPlaying;
   }, [isPlaying]);
 
-  const [tempo, setTempoState] = useState(song.tempo);
+  // 템포는 song.tempo가 유일한 진실이다. 별도 state로 두면 슬라이더로 바꾼
+  // 값이 곡에 반영되지 않아, 저장한 파일에 곡을 만들 때의 옛 템포가 들어간다.
   const [metronome, setMetronomeState] = useState(false);
   const [position, setPosition] = useState({ bar: 1, beat: 1 });
   // SSR에서는 window가 없다. 마운트 후에 실제 값으로 교체된다.
@@ -216,10 +218,11 @@ export function StudioProvider({ children }: { children: React.ReactNode }) {
 
   const setTempo = useCallback(
     (bpm: number) => {
-      setTempoState(bpm);
+      // 히스토리에 쌓지 않는다. 드래그 한 번에 onChange가 수십 번 불린다.
+      replaceWithoutHistory((s) => ({ ...s, tempo: bpm }));
       getEngine().setTempo(bpm);
     },
-    [getEngine],
+    [getEngine, replaceWithoutHistory],
   );
 
   const setMetronome = useCallback(
@@ -297,6 +300,10 @@ export function StudioProvider({ children }: { children: React.ReactNode }) {
 
     const restored = undoSong();
     if (!restored) return;
+    // 템포가 곡 안에 있으므로 되돌리면 템포도 되돌아간다. 엔진의 bpm은
+    // setSong이 건드리지 않으니(engine.ts의 주석 참고) 여기서 맞춰야 한다.
+    // 안 맞추면 슬라이더와 실제 재생 속도가 영구히 갈라진다.
+    getEngine().setTempo(restored.tempo);
     // 생성을 되돌리면 선택된 타일이 사라진다. 그대로 두면 존재하지 않는
     // 타일의 팝오버가 떠 있게 된다.
     setSelection((prev) => {
@@ -305,13 +312,13 @@ export function StudioProvider({ children }: { children: React.ReactNode }) {
       const exists = line?.tiles.some((t) => t.id === prev.tileId);
       return exists ? prev : null;
     });
-  }, [undoSong]);
+  }, [undoSong, getEngine]);
 
   const value = useMemo<StudioValue>(
     () => ({
       song,
       isPlaying,
-      tempo,
+      tempo: song.tempo,
       metronome,
       position,
       supported,
@@ -331,7 +338,6 @@ export function StudioProvider({ children }: { children: React.ReactNode }) {
     [
       song,
       isPlaying,
-      tempo,
       metronome,
       position,
       supported,
