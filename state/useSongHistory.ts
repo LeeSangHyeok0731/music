@@ -29,6 +29,14 @@ export type SongHistory = {
    * 매번 풀려 한 라인만 고쳐도 모든 라인이 다시 그려진다.
    */
   commitWith: (updater: (song: Song) => Song) => void;
+  /**
+   * 히스토리에 쌓지 않고 곡을 교체한다.
+   *
+   * 템포 슬라이더처럼 드래그 한 번에 수십 번 불리는 조작을 위한 것이다.
+   * commitWith로 처리하면 Ctrl+Z 50칸이 전부 템포로 채워져 실제 편집을
+   * 되돌릴 수 없게 된다.
+   */
+  replaceWithoutHistory: (updater: (song: Song) => Song) => void;
   /** 되돌린 곡을 반환한다. 되돌릴 게 없으면 null. */
   undo: () => Song | null;
   canUndo: boolean;
@@ -54,6 +62,15 @@ export function useSongHistory(initial: Song): SongHistory {
     setSong(next);
   }, []);
 
+  const replaceWithoutHistory = useCallback((updater: (song: Song) => Song) => {
+    const next = updater(songRef.current);
+    if (next === songRef.current) return;
+
+    // pastRef를 건드리지 않는다. 이게 commitWith와의 유일한 차이다.
+    songRef.current = next;
+    setSong(next);
+  }, []);
+
   const undo = useCallback((): Song | null => {
     const prev = pastRef.current;
     if (prev.length === 0) return null;
@@ -66,5 +83,11 @@ export function useSongHistory(initial: Song): SongHistory {
     return restored;
   }, []);
 
-  return { song, commitWith, undo, canUndo: past.length > 0 };
+  return {
+    song,
+    commitWith,
+    replaceWithoutHistory,
+    undo,
+    canUndo: past.length > 0,
+  };
 }
