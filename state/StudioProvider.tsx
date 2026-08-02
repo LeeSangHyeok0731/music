@@ -73,6 +73,8 @@ export type StudioValue = {
   position: { bar: number; beat: number };
   supported: boolean;
   error: string | null;
+  /** 트랜스포트 바의 문구 자리에 한 줄을 띄운다. 파일 불러오기 실패에 쓴다. */
+  setError: (message: string | null) => void;
   play: () => void;
   stop: () => void;
   setTempo: (bpm: number) => void;
@@ -349,6 +351,7 @@ export function StudioProvider({ children }: { children: React.ReactNode }) {
       position,
       supported,
       error,
+      setError,
       play,
       stop,
       setTempo,
@@ -369,6 +372,7 @@ export function StudioProvider({ children }: { children: React.ReactNode }) {
       position,
       supported,
       error,
+      setError,
       play,
       stop,
       setTempo,

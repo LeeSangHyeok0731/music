@@ -1,23 +1,55 @@
 "use client";
 
+import { useRef } from "react";
+
+import { parseSong } from "@/lib/score/serialize";
 import { useStudio } from "@/state/StudioProvider";
+
+import { downloadSong, readFileText } from "./songFile";
 
 export function TransportBar() {
   const {
+    song,
     isPlaying,
     tempo,
     metronome,
     position,
     supported,
     error,
+    setError,
     play,
     stop,
     setTempo,
     setMetronome,
+    loadSong,
     undo,
     canUndo,
     editable,
   } = useStudio();
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  async function onPickFile(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    // 같은 파일을 두 번 연속 고르면 값이 안 바뀌어 change가 오지 않는다.
+    // 파일을 고쳐서 다시 여는 게 정확히 그 시나리오다.
+    event.target.value = "";
+    if (!file) return;
+
+    const text = await readFileText(file);
+    if (text === null) {
+      setError("파일을 읽지 못했습니다.");
+      return;
+    }
+
+    const result = parseSong(text);
+    if (!result.ok) {
+      setError(result.reason);
+      return;
+    }
+
+    loadSong(result.song);
+  }
 
   const notice = !supported
     ? "이 브라우저는 Web Audio를 지원하지 않아 재생할 수 없습니다."
@@ -47,6 +79,36 @@ export function TransportBar() {
       >
         ↩ 실행 취소
       </button>
+
+      <button
+        type="button"
+        onClick={() => downloadSong(song)}
+        disabled={!editable}
+        aria-label="곡 저장"
+        className="rounded-md border border-white/10 bg-white/[0.07] px-3 py-1.5 text-[13px] text-zinc-100 transition-colors hover:bg-white/[0.13] disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        ⭳ 저장
+      </button>
+
+      <button
+        type="button"
+        onClick={() => fileInputRef.current?.click()}
+        disabled={!editable}
+        aria-label="곡 불러오기"
+        className="rounded-md border border-white/10 bg-white/[0.07] px-3 py-1.5 text-[13px] text-zinc-100 transition-colors hover:bg-white/[0.13] disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        ⭱ 불러오기
+      </button>
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="application/json,.json"
+        onChange={onPickFile}
+        tabIndex={-1}
+        aria-hidden="true"
+        className="sr-only"
+      />
 
       {/* 폭이 흔들리지 않게 tabular-nums + 고정 자릿수 */}
       <div
