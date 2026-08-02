@@ -260,9 +260,7 @@ export function toggleDrumCell(
   const start = snapToGrid(startTicks);
   if (start + SNAP_TICKS > song.lengthTicks) return song;
 
-  const existing = line.tiles.find(
-    (tile) => tile.start === start && tile.notes[0] === piece,
-  );
+  const existing = line.tiles.find((tile) => isDrumCellTile(tile, start, piece));
   const shouldBeOn = force ?? existing === undefined;
 
   if (shouldBeOn && existing) return song;
@@ -290,6 +288,20 @@ export function toggleDrumCell(
 
 /** 드럼 격자에서 칠할 칸 하나. */
 export type DrumCell = { start: number; piece: number };
+
+/**
+ * "격자 칸 하나 = 타일 하나 = 노트 하나"라는 드럼 라인의 전제를 이 함수 하나에
+ * 담는다. toggleDrumCell/toggleDrumCells와 DrumGrid의 on/off 판정이 각자
+ * 이 조건식을 따로 들고 있었다 — 그 전제가 바뀌면(예: 한 칸에 여러 음) 두
+ * 곳이 같이 안 바뀌는 순간 격자 표시와 실제 토글 결과가 어긋난다.
+ */
+export function isDrumCellTile(
+  tile: Tile,
+  start: number,
+  piece: number,
+): boolean {
+  return tile.start === start && tile.notes[0] === piece;
+}
 
 /**
  * 드럼 칸 여러 개를 한 번에 켜거나 끈다. 이어 칠하기의 커밋 단위다.
@@ -325,8 +337,8 @@ export function toggleDrumCells(
     const start = snapToGrid(cell.start);
     if (start + SNAP_TICKS > song.lengthTicks) continue;
 
-    const existing = tiles.find(
-      (tile) => tile.start === start && tile.notes[0] === cell.piece,
+    const existing = tiles.find((tile) =>
+      isDrumCellTile(tile, start, cell.piece),
     );
 
     if (on && !existing) {

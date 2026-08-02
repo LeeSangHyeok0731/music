@@ -36,6 +36,15 @@ export function Timeline() {
         return;
       }
 
+      // 음 고르기 모달은 버튼으로만 이루어져 있어 위 태그 검사에 안 걸린다.
+      // 가드 없이 두면: Esc가 모달의 Esc 핸들러와 함께 이 아래 select(null)도
+      // 불러 팝오버까지 닫혀 버리고, Delete/Backspace는 편집 중인 타일 자체를
+      // 지워 모달이 편집 대상을 잃은 채 붕 뜨고, Ctrl+Z는 undo로 tile.notes를
+      // 바꿔도 모달의 draft는 initialNotes를 한 번만 읽은 채라 그 상태로
+      // 확인을 누르면 undo가 조용히 되돌려진다. 모달이 열려 있는 동안은
+      // 전역 단축키를 아예 재우고 모달 자신의 핸들러에만 맡긴다.
+      if (document.querySelector('[aria-modal="true"]')) return;
+
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") {
         event.preventDefault();
         undo();
@@ -113,9 +122,10 @@ export function Timeline() {
           <Playflag scrollerRef={scrollerRef} perBar={perBar} />
           {/*
             선택이 바뀌면 새로 마운트시킨다. 팝오버는 닫혀도 null만 반환할 뿐
-            언마운트되지 않아서, 음 추가 드롭다운을 연 채로 Esc를 누르면 그
-            상태가 남는다. 다음 타일이 입력 모드로 열리고 autoFocus가 포커스를
-            가져간다. key를 바꿔 상태를 초기화한다.
+            언마운트되지 않아서, pickerOpen 같은 내부 state가 다음 선택까지
+            그대로 남는다. key를 바꿔 상태를 초기화하지 않으면 어떤 타일을
+            고르고 음 고르기 모달을 연 채로 다른 타일을 선택했을 때 새 타일의
+            팝오버가 모달이 열린 채로 나타난다.
           */}
           <TilePopover
             key={selection ? `${selection.lineId}:${selection.tileId}` : "none"}

@@ -203,6 +203,14 @@ export class Engine {
 
     const pool = new VoicePool(ctx, master);
 
+    // early return(this.master) 때문에 이 맵은 최초 play() 시점의
+    // this.song.lines로 딱 한 번만 채워지고, setSong()은 이 맵을 건드리지
+    // 않는다. 지금은 맞는 전제다 — 라인 추가/삭제가 아직 이 편집기의 범위
+    // 밖이라 song.lines의 라인 구성 자체는 안 바뀐다. 그 전제가 깨지는 날
+    // (라인을 추가/삭제하는 기능이 생기는 날) sink.schedule의
+    // `this.instruments.get(lineId)?.play(...)`가 못 찾은 라인을 조용히
+    // 무시해버린다 — 예외도 로그도 없이 노트만 안 울리는, 가장 찾기 어려운
+    // 종류의 오디오 버그다. 그 기능을 만들 때는 여기 맵도 같이 갱신할 것.
     for (const line of this.song.lines) {
       this.instruments.set(line.id, createInstrument(line.instrument, ctx, pool));
     }

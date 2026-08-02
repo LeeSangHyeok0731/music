@@ -38,8 +38,13 @@ export function Playflag({
       }
 
       const scroller = scrollerRef.current;
+      // clientWidth가 0이면 스크롤러가 아직 레이아웃되지 않은 상태다(예:
+      // 숨겨진 탭). 그때 그대로 계산하면 임계값이 0이 되어 조건이 항상 참이
+      // 되고, scrollLeft가 px로 바로 튀어 레이아웃이 잡히는 순간 점프컷처럼
+      // 보인다.
       if (
         scroller &&
+        scroller.clientWidth > 0 &&
         px - scroller.scrollLeft > scroller.clientWidth * FOLLOW_THRESHOLD
       ) {
         scroller.scrollLeft = px - scroller.clientWidth * 0.5;
@@ -56,7 +61,7 @@ export function Playflag({
     <div
       ref={flagRef}
       aria-hidden
-      className="pointer-events-none absolute inset-y-0 left-0 z-10 w-px bg-red-500 will-change-transform"
+      className="pointer-events-none absolute inset-y-0 left-0 w-px bg-red-500 will-change-transform"
     >
       {/* 눈금자 위에 얹히는 머리. 플래그가 어디에 있는지 멀리서도 보인다. */}
       <div className="absolute -top-px -left-[3.5px] h-2 w-2 rotate-45 rounded-[1px] bg-red-500" />
