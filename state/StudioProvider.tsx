@@ -81,6 +81,8 @@ export type StudioValue = {
   selection: TileRef | null;
   select: (ref: TileRef | null) => void;
   edit: TileEditHandlers;
+  /** 곡을 통째로 교체한다. 실행취소 스택에 쌓이므로 Ctrl+Z로 되돌린다. */
+  loadSong: (song: Song) => void;
   undo: () => void;
   canUndo: boolean;
   editable: boolean;
@@ -291,6 +293,26 @@ export function StudioProvider({ children }: { children: React.ReactNode }) {
     [commitWith],
   );
 
+  const loadSong = useCallback(
+    (loaded: Song) => {
+      // 편집 핸들러와 같은 가드다. Engine.setSong은 재생 중이면 무시하는데,
+      // 곡을 갱신하는 effect는 song에만 반응하므로 정지해도 다시 맞춰주지
+      // 않는다. 재생 중에 불러오면 화면과 엔진이 영원히 갈라진다.
+      if (playingRef.current) return;
+
+      // commitWith가 먼저다. setTempo를 먼저 부르면 replaceWithoutHistory가
+      // 옛 곡의 템포를 갱신하고, 그 직후 commitWith가 그걸 통째로 덮어쓴다.
+      commitWith(() => loaded);
+      getEngine().setTempo(loaded.tempo);
+
+      // 불러온 곡에 이전 선택이 있을 리 없다. 안 지우면 존재하지 않는
+      // 타일의 팝오버가 떠 있게 된다.
+      setSelection(null);
+      setError(null);
+    },
+    [commitWith, getEngine],
+  );
+
   const undo = useCallback(() => {
     // 편집 핸들러와 같은 가드가 필요하다. Engine.setSong은 재생 중이면
     // 무시하는데, 곡을 갱신하는 effect는 song에만 반응하므로 정지해도 다시
@@ -331,6 +353,7 @@ export function StudioProvider({ children }: { children: React.ReactNode }) {
       selection,
       select,
       edit,
+      loadSong,
       undo,
       canUndo,
       editable,
@@ -350,6 +373,7 @@ export function StudioProvider({ children }: { children: React.ReactNode }) {
       selection,
       select,
       edit,
+      loadSong,
       undo,
       canUndo,
       editable,
