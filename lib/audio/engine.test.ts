@@ -210,6 +210,86 @@ describe("Engine 시작 레이스", () => {
   });
 });
 
+/**
+ * 라인 하나짜리 1마디 곡. 라인 id와 노트를 인자로 받아 setSong 전후 곡을
+ * 쉽게 만든다.
+ */
+function songWithLine(lineId: string, note: number): Song {
+  const timeSignature: [number, number] = [4, 4];
+  return {
+    tempo: 120,
+    timeSignature,
+    lengthTicks: ticksPerBar(timeSignature),
+    lines: [
+      {
+        id: lineId,
+        name: "피아노",
+        kind: "pitched",
+        instrument: "piano",
+        tiles: [
+          {
+            id: "tile-0",
+            start: 0, // 재생 시작 즉시(첫 onTimer) 예약되도록 곡 맨 앞
+            length: 480,
+            velocity: 0.7,
+            notes: [note],
+          },
+        ],
+      },
+    ],
+  };
+}
+
+describe("Engine setSong — 악기 맵 동기화", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("불러온 곡의 라인 id가 바뀌면 새 라인도 소리가 난다", async () => {
+    // 재현: 재생 한 번으로 악기 맵을 만들고(buildGraph는 최초 1회만 돈다),
+    // 정지 후 라인 id가 다른 곡을 setSong으로 갈아끼운다. 맵을 다시 채우지
+    // 않으면 sink.schedule의 `this.instruments.get(lineId)?.play(...)`가
+    // 새 id를 찾지 못해 예외도 로그도 없이 그 라인 전체가 무음이 된다.
+    const ctx = new FakeAudioContext();
+    const engine = new Engine(
+      songWithLine("line-old", 60),
+      immediateProvider(ctx),
+    );
+
+    await engine.play();
+    tick(ctx); // tick 0의 노트가 예약되며 오실레이터 3개(부분음)가 생긴다
+    const oscillatorsAfterFirstPlay = ctx.created.filter(
+      (n) => n.kind === "oscillator",
+    ).length;
+    expect(oscillatorsAfterFirstPlay).toBeGreaterThan(0);
+
+    engine.stop();
+
+    // 라인 id가 "line-old" -> "line-new"로 바뀐 곡을 불러온다. 파일
+    // 불러오기가 정확히 이 모양의 곡을 들여올 수 있다.
+    engine.setSong(songWithLine("line-new", 67));
+
+    await engine.play();
+    tick(ctx);
+
+    const oscillatorsAfterSecondPlay = ctx.created.filter(
+      (n) => n.kind === "oscillator",
+    ).length;
+
+    // 두 번째 재생에서도 새 라인("line-new")의 노트가 실제로 악기까지
+    // 도달해 오실레이터가 새로 생겨야 한다. 맵이 갱신되지 않으면 이 수가
+    // 늘지 않는다 — instruments.get("line-new")가 undefined라 아무 일도
+    // 안 일어나기 때문이다.
+    expect(oscillatorsAfterSecondPlay).toBeGreaterThan(
+      oscillatorsAfterFirstPlay,
+    );
+  });
+});
+
 describe("Engine 자동 정지", () => {
   beforeEach(() => {
     vi.useFakeTimers();

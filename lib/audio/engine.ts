@@ -176,11 +176,32 @@ export class Engine {
    */
   setSong(song: Song): void {
     if (this.playing) return;
+
+    // 라인 구성(id·instrument 쌍의 순서)이 바뀌면 악기 맵을 다시 채운다.
+    // 파일 불러오기는 라인 id나 instrument가 다른 곡을 통째로 들여올 수
+    // 있어서, 맵을 그대로 두면 sink.schedule의 `this.instruments.get(lineId)`가
+    // 못 찾은 라인을 조용히 무시하거나(무음) 옛 악기로 재생한다.
+    // ctx/pool이 아직 없으면(한 번도 play()하지 않았거나 dispose된 뒤라면)
+    // 다시 채울 그래프 자체가 없다 — 다음 buildGraph()가 새 song.lines로
+    // 정확히 채우므로 여기서는 아무 것도 하지 않는다.
+    if (this.ctx && this.pool && !sameLineComposition(this.song, song)) {
+      this.instruments.clear();
+      for (const line of song.lines) {
+        this.instruments.set(
+          line.id,
+          createInstrument(line.instrument, this.ctx, this.pool),
+        );
+      }
+    }
+
     this.song = song;
-    // bpm은 건드리지 않는다. 생성자에서 곡의 템포로 시작한 뒤로는 setTempo가
-    // 소유한다. 여기서 song.tempo를 다시 넣으면 사용자가 슬라이더로 올려둔
-    // 템포가 편집 한 번에 곡의 원래 값으로 되돌아간다 — 트랜스포트는 160을
-    // 보여주는데 소리는 120으로 나는 상태가 된다.
+    // bpm은 건드리지 않는다. 템포 통합 이후 song.tempo와 엔진의 bpm은
+    // 이름만 다른 같은 값이다 — 곡을 갈아끼우는 호출부가 이 둘을 맞추는
+    // 책임을 진다: StudioProvider의 setTempo·loadSong·undo가 setSong과
+    // 같은 호출에서 getEngine().setTempo(song.tempo)를 명시적으로 부른다.
+    // 여기서 song.tempo를 bpm에 대입하면 책임이 두 곳(호출부 + 여기)에
+    // 생겨 어느 한쪽이 먼저/나중에 불려도 안전해야 하는 부담이 생긴다 —
+    // 그건 이 코멘트 하나를 고치는 범위를 넘는 동작 변경이라 하지 않는다.
   }
 
   dispose(): void {
@@ -203,14 +224,14 @@ export class Engine {
 
     const pool = new VoicePool(ctx, master);
 
-    // early return(this.master) 때문에 이 맵은 최초 play() 시점의
-    // this.song.lines로 딱 한 번만 채워지고, setSong()은 이 맵을 건드리지
-    // 않는다. 지금은 맞는 전제다 — 라인 추가/삭제가 아직 이 편집기의 범위
-    // 밖이라 song.lines의 라인 구성 자체는 안 바뀐다. 그 전제가 깨지는 날
-    // (라인을 추가/삭제하는 기능이 생기는 날) sink.schedule의
+    // early return(this.master) 때문에 이 맵은 최초 play() 시점에만 이
+    // 루프로 채워진다. 그 뒤로 라인 구성이 바뀌는 유일한 경로는 setSong()
+    // 뿐이고, setSong()이 sameLineComposition()으로 변화를 감지해 맵을
+    // 직접 다시 채운다(위 참고) — 그래서 여기서는 그냥 최초 채우기만 하면
+    // 된다. 이 동기화가 깨지면 sink.schedule의
     // `this.instruments.get(lineId)?.play(...)`가 못 찾은 라인을 조용히
     // 무시해버린다 — 예외도 로그도 없이 노트만 안 울리는, 가장 찾기 어려운
-    // 종류의 오디오 버그다. 그 기능을 만들 때는 여기 맵도 같이 갱신할 것.
+    // 종류의 오디오 버그다.
     for (const line of this.song.lines) {
       this.instruments.set(line.id, createInstrument(line.instrument, ctx, pool));
     }
@@ -263,4 +284,20 @@ export class Engine {
       this.nextClickTick += beat;
     }
   }
+}
+
+/**
+ * 두 곡의 라인 구성(순서·id·instrument)이 같은지 본다.
+ *
+ * 타일 내용(노트, 세기, 길이 등)은 보지 않는다 — 그건 스케줄러가 매번
+ * this.song에서 새로 읽으므로 악기 맵과 무관하다. 여기서 보는 것은 오직
+ * "sink.schedule이 lineId로 인스트루먼트를 찾을 수 있는가"에 영향을 주는
+ * 두 가지, id와 instrument뿐이다.
+ */
+function sameLineComposition(a: Song, b: Song): boolean {
+  if (a.lines.length !== b.lines.length) return false;
+  return a.lines.every(
+    (line, i) =>
+      line.id === b.lines[i].id && line.instrument === b.lines[i].instrument,
+  );
 }
