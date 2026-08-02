@@ -13,12 +13,16 @@ import {
 } from "@/lib/score/notes";
 
 /**
- * 검은건이 걸치는 흰건 이음매. 인덱스는 SHARP_SEMITONES와 같은 순서다.
+ * 검은건이 걸치는 흰건 이음매. 키는 반음(semitone) 값이지 배열 위치가
+ * 아니다 — SHARP_SEMITONES를 순서대로 도는 코드가 아니라 값으로 조회한다.
  * 반음이 균등 분포가 아니라 미/파, 시/도 사이에는 검은건이 없기 때문에
  * 칸 개수로 흩뿌리면 자리가 틀어진다 — 실제 이음매 위치를 표로 못박는다.
  * (도# 도레 사이, 레# 레미 사이, 파# 파솔 사이, 솔# 솔라 사이, 라# 라시 사이)
+ * SHARP_SEMITONES 값이 아닌 걸 넣으면 컴파일 타임에 걸리도록 키 타입을
+ * 그 튜플로 좁힌다 — 표 갱신을 빠뜨리면 런타임에 undefined가 되어
+ * left: NaN으로 조용히 0번 위치에 겹치는 사고를 막는다.
  */
-const SHARP_SEAM_INDEX: Record<number, number> = {
+const SHARP_SEAM_INDEX: Record<(typeof SHARP_SEMITONES)[number], number> = {
   1: 1, // 도#: 도(0)와 레(1) 사이
   3: 2, // 레#: 레(1)와 미(2) 사이
   6: 4, // 파#: 파(3)와 솔(4) 사이
@@ -92,7 +96,9 @@ export function NotePickerModal({
         <div className="mb-4 flex min-h-[26px] flex-wrap items-center gap-1 rounded border border-white/10 bg-white/5 p-1.5">
           <span className="mr-1 text-[11px] text-zinc-500">선택</span>
           {sortedDraft.length === 0 && (
-            <span className="text-[11px] text-zinc-500">없음</span>
+            <span id="note-picker-empty-hint" className="text-[11px] text-zinc-500">
+              없음
+            </span>
           )}
           {sortedDraft.map((note) => (
             <button
@@ -206,7 +212,12 @@ export function NotePickerModal({
             type="button"
             // 빈 선택은 setTileNotes가 조용히 무시한다 — 눌러도 아무 일도
             // 안 일어나는 버튼 대신 아예 비활성화해서 이유를 보여준다.
+            // aria-describedby는 비활성화된 이유("없음")를 스크린 리더에도
+            // 연결한다 — 그 span은 정확히 이 disabled 조건에서만 존재한다.
             disabled={sortedDraft.length === 0}
+            aria-describedby={
+              sortedDraft.length === 0 ? "note-picker-empty-hint" : undefined
+            }
             className="rounded bg-indigo-500 px-3 py-1 text-xs text-white hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-indigo-500"
             onClick={() => onConfirm(sortedDraft)}
           >

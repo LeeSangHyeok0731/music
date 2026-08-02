@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 import { midiToName } from "@/lib/score/notes";
 import { useStudio } from "@/state/StudioProvider";
@@ -41,15 +42,18 @@ export function TilePopover({ perBar }: { perBar: number }) {
     if (!open) return;
 
     function onKeyDown(event: KeyboardEvent) {
-      // 모달이 떠 있는 동안은 모달 자신의 Esc 핸들러가 모달만 닫는다.
-      // 여기서도 반응하면 팝오버까지 같이 닫혀 선택이 풀려 버린다.
+      // 이 가드는 팝오버가 같이 닫히는 걸 막지 못한다 — Timeline.tsx의
+      // window keydown 리스너가 따로 있고, 그쪽이 모달 열림 여부와 무관하게
+      // Esc에서 select(null)을 부르기 때문이다(그 리스너 쪽에 가드가 있다).
+      // 여기 있는 건 이 컴포넌트가 자기 자신의 리스너에서 이중으로
+      // select(null)을 부르지 않게 하는 것뿐이다.
       if (pickerOpen) return;
       if (event.key === "Escape") select(null);
     }
     function onPointerDown(event: PointerEvent) {
-      // 모달은 이 ref 바깥(포털처럼 body 레벨)에 뜬다. 가드가 없으면
-      // 모달 안을 클릭할 때마다 "바깥 클릭"으로 오인해 팝오버가 먼저
-      // 닫히고 그 아래 모달만 허공에 남는다.
+      // 모달은 createPortal로 body 바로 아래에 뜨므로 이 ref 안에 없다.
+      // 가드가 없으면 모달 안을 클릭할 때마다 "바깥 클릭"으로 오인해
+      // 팝오버가 먼저 닫히고 그 아래 모달만 허공에 남는다.
       if (pickerOpen) return;
       if (ref.current && !ref.current.contains(event.target as Node)) {
         select(null);
@@ -182,21 +186,26 @@ export function TilePopover({ perBar }: { perBar: number }) {
         </label>
       </div>
       {/*
-        팝오버의 ref 바깥에 둔다. 팝오버는 pointerdown이 이 ref 밖이면
-        선택을 풀도록 되어 있는데, 모달을 ref 안에 두면 모달 내부 클릭도
-        "바깥 클릭"으로 오인해 팝오버가 먼저 닫히고 모달만 허공에 남는다.
-        (위 useEffect의 pickerOpen 가드와 짝을 이루는 코드다.)
+        body에 포털로 띄운다. .timeline-scroll 안(이 컴포넌트가 렌더되는
+        위치)에 그대로 두면 fixed 백드롭이 스크롤 컨테이너의 자손이 되어,
+        모달 위에서 휠을 굴리면 뒤의 타임라인이 스크롤된다 — 백드롭 자신은
+        스크롤되지 않으니 이벤트가 가장 가까운 스크롤 가능한 조상을 타고
+        올라간 것이다. body 포털이면 그 조상이 없다.
+        (ref 밖으로 나가는 결과는 같아서, 위 useEffect의 pickerOpen 가드도
+        여전히 필요하다 — window 리스너는 DOM 포함 관계로만 판정한다.)
       */}
-      {pickerOpen && (
-        <NotePickerModal
-          initialNotes={tile.notes}
-          onCancel={() => setPickerOpen(false)}
-          onConfirm={(notes) => {
-            edit.setNotes(line.id, tile.id, notes);
-            setPickerOpen(false);
-          }}
-        />
-      )}
+      {pickerOpen &&
+        createPortal(
+          <NotePickerModal
+            initialNotes={tile.notes}
+            onCancel={() => setPickerOpen(false)}
+            onConfirm={(notes) => {
+              edit.setNotes(line.id, tile.id, notes);
+              setPickerOpen(false);
+            }}
+          />,
+          document.body,
+        )}
     </>
   );
 }
