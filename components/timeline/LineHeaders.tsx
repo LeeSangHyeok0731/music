@@ -1,6 +1,6 @@
 import { memo } from "react";
 
-import type { Line } from "@/lib/score/types";
+import type { InstrumentId, Line } from "@/lib/score/types";
 
 import {
   DRUM_ROWS,
@@ -13,8 +13,11 @@ import {
 
 const DRUM_ROW_NAMES = ["킥", "스네어", "하이햇"];
 
-/** 헤더 열의 악기 이름 옆에 붙는 색 점. 타일 색과 같은 계열로 맞춘다. */
-const DOT_COLORS: Record<string, string> = {
+/**
+ * 헤더 열의 악기 이름 옆에 붙는 색 점. 타일 색과 같은 계열로 맞춘다.
+ * InstrumentId 전부를 키로 요구하므로 fallback이 필요 없다.
+ */
+const DOT_COLORS: Record<InstrumentId, string> = {
   piano: "bg-indigo-400",
   guitar: "bg-emerald-400",
   bass: "bg-amber-400",
@@ -50,9 +53,7 @@ function LineHeadersImpl({ lines }: { lines: Line[] }) {
             <div className="flex items-center gap-2">
               <span
                 aria-hidden
-                className={`h-2 w-2 shrink-0 rounded-full ${
-                  DOT_COLORS[line.instrument] ?? DOT_COLORS.piano
-                }`}
+                className={`h-2 w-2 shrink-0 rounded-full ${DOT_COLORS[line.instrument]}`}
               />
               <span className="truncate text-[13px] text-zinc-300">
                 {line.name}
@@ -65,6 +66,8 @@ function LineHeadersImpl({ lines }: { lines: Line[] }) {
   );
 }
 
-// lines는 song에서 useMemo로 나오는 배열이라 참조가 안정적이다 — 재생
-// 중 리렌더되는 context value 때문에 트랙 헤더까지 다시 그릴 필요는 없다.
+// song은 state이고 replaceLine이 편집마다 새 lines 배열을 만들므로, 편집
+// 중에는 이 memo가 매번 풀린다 — 그래도 재생 중에는(편집이 없는 구간) props가
+// 그대로라 memo가 그대로 유효하다. 10Hz로 바뀌는 context value 때문에 재생
+// 중 트랙 헤더까지 다시 그릴 필요는 없다는 게 이 memo가 지키는 케이스다.
 export const LineHeaders = memo(LineHeadersImpl);

@@ -3,13 +3,15 @@
 import { memo, useRef } from "react";
 
 import { midiToName } from "@/lib/score/notes";
-import type { Line } from "@/lib/score/types";
+import type { InstrumentId, Line } from "@/lib/score/types";
 import type { TileEditHandlers, TileRef } from "@/state/StudioProvider";
 
 import { PITCHED_LINE_HEIGHT, ROW_DIVIDER, pxToTick, tickToPx } from "./layout";
 import { useTileDrag } from "./useTileDrag";
 
-const COLORS: Record<string, string> = {
+// InstrumentId 전부를 키로 요구하는 타입이라 fallback이 필요 없다 —
+// 새 악기가 추가되면 여기 빠뜨린 게 타입 에러로 바로 드러난다.
+const COLORS: Record<InstrumentId, string> = {
   piano: "bg-indigo-500/25 border-indigo-400/60 text-indigo-100",
   guitar: "bg-emerald-500/25 border-emerald-400/60 text-emerald-100",
   bass: "bg-amber-500/25 border-amber-400/60 text-amber-100",
@@ -43,7 +45,7 @@ function TileLineImpl({
    */
   onSelect: (ref: TileRef | null) => void;
 }) {
-  const color = COLORS[line.instrument] ?? COLORS.piano;
+  const color = COLORS[line.instrument];
   /** 빈 칸을 누른 지점. 뗄 때 클릭인지 드래그인지 판정한다. */
   const pressRef = useRef<{ x: number; y: number } | null>(null);
 
