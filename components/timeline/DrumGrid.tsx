@@ -2,7 +2,7 @@
 
 import { memo, useRef, useState } from "react";
 
-import { SNAP_TICKS } from "@/lib/score/edit";
+import { SNAP_TICKS, isDrumCellTile } from "@/lib/score/edit";
 import type { DrumCell } from "@/lib/score/edit";
 import type { Line } from "@/lib/score/types";
 import type { TileEditHandlers } from "@/state/StudioProvider";
@@ -101,8 +101,8 @@ function DrumGridImpl({
         if (!cell) return;
         event.currentTarget.setPointerCapture(event.pointerId);
 
-        const isOn = line.tiles.some(
-          (tile) => tile.start === cell.start && tile.notes[0] === cell.piece,
+        const isOn = line.tiles.some((tile) =>
+          isDrumCellTile(tile, cell.start, cell.piece),
         );
         stroke.current = { on: !isOn, cells: [] };
         addToStroke(cell);
@@ -140,7 +140,10 @@ function DrumGridImpl({
             key={tile.id}
             className="pointer-events-none absolute rounded-sm border border-rose-300/60 bg-rose-500/45"
             style={{
-              left: tickToPx(tile.start, perBar) + 1,
+              // TileLine의 음정 타일과 같은 기준(오프셋 없이 tickToPx 그대로)을
+              // 쓴다. 전에는 여기만 +1이라 같은 틱이어도 드럼 타일이 음정
+              // 타일보다 1px 오른쪽에서 시작했다.
+              left: tickToPx(tile.start, perBar),
               top: row * DRUM_ROW_HEIGHT + 5,
               width: Math.max(tickToPx(tile.length, perBar) - 2, 4),
               height: DRUM_ROW_HEIGHT - 10,
@@ -156,9 +159,7 @@ function DrumGridImpl({
           const row = DRUM_ROWS.indexOf(piece as (typeof DRUM_ROWS)[number]);
           if (row < 0) return null;
           // 이미 켜져 있던 칸은 위에서 그리므로 두 번 그리지 않는다
-          if (
-            line.tiles.some((t) => t.start === start && t.notes[0] === piece)
-          ) {
+          if (line.tiles.some((t) => isDrumCellTile(t, start, piece))) {
             return null;
           }
 
@@ -167,7 +168,7 @@ function DrumGridImpl({
               key={key}
               className="pointer-events-none absolute rounded-sm border border-rose-300/60 bg-rose-500/45"
               style={{
-                left: tickToPx(start, perBar) + 1,
+                left: tickToPx(start, perBar),
                 top: row * DRUM_ROW_HEIGHT + 5,
                 width: Math.max(tickToPx(SNAP_TICKS, perBar) - 2, 4),
                 height: DRUM_ROW_HEIGHT - 10,
