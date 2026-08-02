@@ -268,9 +268,15 @@ zod 이슈는 **첫 번째 것만 한 줄로** 줄인다. `notice`가 `ml-auto`�
 - **복구 결과가 다시 유효하다** — 복구된 곡을 `edit.ts`의 함수에 넣어도 정렬 불변식이 유지된다
 - **거부는 예외를 던지지 않는다** — 모든 실패 경로가 `{ ok: false }`를 반환한다
 
-`useSongHistory.replaceWithoutHistory`도 테스트한다 — 곡은 바뀌고 `canUndo`는 그대로여야 한다.
+### 테스트하지 않는 것
 
-파일 I/O(`Blob`, `URL.createObjectURL`, `file.text()`)는 브라우저 API라 테스트하지 않는다.
+`vitest.config.mts`가 `environment: "node"`이고 `include`는 `lib/**`와 `state/**`뿐이다. `@testing-library/react`도 없다. 따라서 다음은 자동 테스트 대상이 아니다.
+
+- **`useSongHistory.replaceWithoutHistory`** — 훅 안의 함수라 렌더 없이는 부를 수 없다. 기존 `useSongHistory.test.ts`도 순수 함수인 `pushHistory`만 테스트하고 훅은 건드리지 않는다. 이 패턴을 따른다
+- **파일 I/O** (`Blob`, `URL.createObjectURL`, `file.text()`) — 브라우저 API다
+- **`components/`** — `include` 밖이다
+
+훅 테스트를 위해 `@testing-library/react`와 `jsdom`을 들이는 것은 이 슬라이스의 범위가 아니다. 대신 아래 수동 검증 5번이 `replaceWithoutHistory`의 핵심 계약(템포 변경이 히스토리를 더럽히지 않는다)을 직접 확인한다.
 
 ## 검증
 
@@ -287,7 +293,8 @@ pnpm build
 2. 새로고침한다 (데모 곡으로 돌아간다)
 3. 저장한 파일을 불러온다 — 타일과 **템포 슬라이더 위치**가 그대로여야 한다
 4. 재생해서 **바꾼 템포로 울리는지 귀로 확인한다** — 이게 템포 일원화의 핵심 검증이다
-5. `Ctrl+Z` — 곡과 템포가 함께 데모 곡으로 돌아와야 한다
-6. 같은 파일을 연속 두 번 불러온다 — 두 번째도 동작해야 한다 (input value 리셋)
-7. 아무 `.json`(예: `package.json`)을 불러온다 — `Bandline 곡 파일이 아닙니다.`가 떠야 한다
-8. 재생 중에는 두 버튼이 비활성화돼 있어야 한다
+5. **템포 슬라이더를 크게 한 번 드래그한 뒤 `Ctrl+Z`** — 템포가 아니라 **직전에 찍은 타일**이 되돌아가야 한다. 슬라이더가 히스토리에 쌓이면 여기서 템포만 한 칸씩 움직이고 타일은 그대로 남는다. `replaceWithoutHistory`의 핵심 계약이다
+6. `Ctrl+Z`로 불러오기를 되돌린다 — 곡과 템포가 **함께** 이전 상태로 돌아와야 한다
+7. 같은 파일을 연속 두 번 불러온다 — 두 번째도 동작해야 한다 (input value 리셋)
+8. 아무 `.json`(예: `package.json`)을 불러온다 — `Bandline 곡 파일이 아닙니다.`가 떠야 한다
+9. 재생 중에는 두 버튼이 비활성화돼 있어야 한다
