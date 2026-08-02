@@ -916,7 +916,24 @@ Modify `state/StudioProvider.tsx:217-223`:
   );
 ```
 
-- [ ] **Step 4: context value가 곡의 템포를 내보내게 한다**
+- [ ] **Step 4: undo가 엔진 템포를 복원된 곡에 맞추게 한다**
+
+템포가 곡 안으로 들어오면서 `undo`도 템포를 되돌리게 된다. 그런데 `lib/audio/engine.ts:177`의 `setSong`은 의도적으로 `bpm`을 건드리지 않으므로, 엔진은 되돌리기 전 템포를 그대로 들고 있는다.
+
+**이걸 빠뜨리면 화면 슬라이더는 120인데 소리는 160으로 나는 상태가 된다** — 이 슬라이스가 없애려는 바로 그 갈라짐이다. 곡을 갱신하는 effect는 `setSong`만 부르므로 스스로 낫지 않는다.
+
+Modify `state/StudioProvider.tsx` — `undo` 콜백에서 `const restored = undoSong();` 아래, 선택 정리 위에 추가:
+
+```ts
+    // 템포가 곡 안에 있으므로 되돌리면 템포도 되돌아간다. 엔진의 bpm은
+    // setSong이 건드리지 않으니(engine.ts의 주석 참고) 여기서 맞춰야 한다.
+    // 안 맞추면 슬라이더와 실제 재생 속도가 영구히 갈라진다.
+    getEngine().setTempo(restored.tempo);
+```
+
+`undo`의 의존성 배열에 `getEngine`을 추가한다.
+
+- [ ] **Step 5: context value가 곡의 템포를 내보내게 한다**
 
 Modify `state/StudioProvider.tsx` — `useMemo<StudioValue>`의 객체에서 `tempo,`를 다음으로 바꾼다:
 
@@ -926,15 +943,15 @@ Modify `state/StudioProvider.tsx` — `useMemo<StudioValue>`의 객체에서 `te
 
 그리고 같은 `useMemo`의 의존성 배열에서 `tempo,`를 **제거한다**. `song`이 이미 의존성에 있으므로 템포가 바뀌면 `song`이 새 객체가 되어 value가 갱신된다.
 
-- [ ] **Step 5: 검사**
+- [ ] **Step 6: 검사**
 
 Run: `pnpm check-types`
-Expected: 에러 없음. 만약 `tempo is not defined`가 나오면 Step 4에서 놓친 참조가 있다 — `useMemo` 의존성 배열을 확인한다.
+Expected: 에러 없음. 만약 `tempo is not defined`가 나오면 Step 5에서 놓친 참조가 있다 — `useMemo` 의존성 배열을 확인한다.
 
 Run: `pnpm lint`
 Expected: 에러 없음. `react-hooks/exhaustive-deps` 경고가 나오면 의존성 배열이 실제 참조와 어긋난 것이다.
 
-- [ ] **Step 6: 실제로 들어본다**
+- [ ] **Step 7: 실제로 들어본다**
 
 Run: `pnpm dev`
 
@@ -942,10 +959,13 @@ Run: `pnpm dev`
 2. 재생한다 — **160으로 들려야 한다**
 3. 정지하고 타일을 하나 찍는다
 4. 슬라이더를 다시 크게 움직인 뒤 `Ctrl+Z`를 한 번 누른다 — **템포가 아니라 3번에서 찍은 타일이 사라져야 한다**
+5. 그 상태에서 **다시 재생한다** — 슬라이더가 가리키는 숫자와 실제로 들리는 속도가 같아야 한다
 
-4번이 이 태스크의 핵심이다. 템포가 한 칸씩 되돌아가면 `replaceWithoutHistory` 대신 `commitWith`를 쓴 것이다.
+4번은 `replaceWithoutHistory`의 검증이다. 템포가 한 칸씩 되돌아가면 `commitWith`를 쓴 것이다.
 
-- [ ] **Step 7: 커밋**
+**5번은 Step 4의 검증이다.** 되돌리기가 곡의 템포를 옛 값으로 바꿔 놓았는데 엔진의 `bpm`은 그대로라면, 화면은 120을 보여주면서 소리는 160으로 난다. 눈으로는 안 보이고 귀로만 잡힌다.
+
+- [ ] **Step 8: 커밋**
 
 ```bash
 git add state/StudioProvider.tsx
