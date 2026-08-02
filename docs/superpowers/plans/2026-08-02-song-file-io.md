@@ -64,8 +64,8 @@
 - Produces:
   - `export const FILE_FORMAT = "bandline-song"`
   - `export const FILE_VERSION = 1`
-  - `export const SongFileSchema` — `safeParse(unknown)` 시 `{ format, version, song: Song }`을 돌려주는 zod 스키마
-  - `export type SongFile = { format: typeof FILE_FORMAT; version: typeof FILE_VERSION; song: Song }`
+  - `export const SongFileSchema` — `safeParse(unknown)` 시 `{ format, version, song }`을 돌려주는 zod 스키마. `song`의 모양이 `Song`과 맞는지는 Task 2의 `parseSong` 반환 타입에서 검사된다
+  - 타입 alias는 export하지 않는다. `schema.ts`는 `Song`을 import하지 않는다
 
 - [ ] **Step 1: zod 설치**
 
