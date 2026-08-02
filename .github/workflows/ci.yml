@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  # 머지 후 main이 깨졌는지도 본다. PR에서만 돌리면 두 PR이 각자 통과한 뒤
+  # 합쳐졌을 때 깨지는 경우를 놓친다.
+  push:
+    branches: [main]
+
+# 같은 PR에 새 커밋이 오면 이전 실행은 취소한다. 어차피 낡은 결과다.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # package.json의 packageManager 필드를 읽어 그 버전을 쓴다.
+      # 로컬과 CI가 다른 pnpm을 쓰면 lockfile 해석이 갈릴 수 있다.
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      # lockfile과 package.json이 어긋나면 여기서 실패한다. CI가 조용히
+      # 다른 의존성을 설치해 통과시키는 일이 없어야 한다.
+      - name: 의존성 설치
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: 타입 검사
+        run: pnpm check-types
+
+      - name: 테스트
+        run: pnpm test
+
+      # 빌드가 마지막인 이유는 가장 오래 걸려서다. 앞의 셋이 깨지면
+      # 빌드까지 기다릴 이유가 없다.
+      #
+      # 이 프로젝트에서 빌드는 특별한 의미가 있다 — AudioContext를 모듈
+      # 스코프에서 만들면 서버 렌더링 중에 평가되어 여기서 깨진다.
+      # 정적 검사로는 잡히지 않는 실수다.
+      - name: 빌드
+        run: pnpm build
