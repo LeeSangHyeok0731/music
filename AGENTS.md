@@ -10,13 +10,17 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 ## 현재 상태
 
-타임라인에서 곡을 편집하고 재생할 수 있다. `lib/score/`(곡 데이터·시간 변환·편집 함수), `lib/audio/`(AudioContext·look-ahead 스케줄러·신스 악기 4종), `state/`, `components/timeline/`, `components/transport/`가 실제로 존재한다.
+타임라인에서 곡을 편집하고 재생하고 파일로 저장할 수 있다. `lib/score/`(곡 데이터·시간 변환·편집 함수·파일 형식), `lib/audio/`(AudioContext·look-ahead 스케줄러·신스 악기 4종), `state/`, `components/timeline/`, `components/transport/`가 실제로 존재한다.
 
 16마디 데모 곡(`lib/score/fixture.ts`)으로 시작해서, 타일을 찍고 옮기고 늘리고 지울 수 있다. 드럼은 격자 칸 토글로 만들고 드래그로 이어 칠한다. 타일을 클릭하면 음·세기·길이를 고치는 팝오버가 뜬다. `Ctrl+Z`로 되돌린다.
 
+곡은 JSON 파일로 저장하고 다시 불러온다. 불러오기도 실행취소 스택에 쌓이므로 `Ctrl+Z`로 되돌린다. 파일 형식과 검증 규칙은 `docs/song-file-format.md`에 있다 — 손으로 고친 파일도 받으므로 zod 스키마(`lib/score/schema.ts`)가 구조를 거부하고 정렬·범위는 복구한다.
+
+**템포는 `song.tempo`가 유일한 진실이다.** 슬라이더가 곡을 갱신하고, 곡을 통째로 바꾸는 경로(`loadSong`, `undo`)는 엔진에 `setTempo`를 직접 불러야 한다 — `Engine.setSong`은 `bpm`을 건드리지 않는다. 빠뜨리면 화면과 실제 재생 속도가 갈라지고 스스로 낫지 않는다.
+
 **편집은 정지 중에만 된다** — 재생 중 타임라인은 읽기 전용이다. 스케줄러의 커서가 `tiles[]` 인덱스라 재생 중 곡이 바뀌면 노트가 조용히 누락된다.
 
-아직 없는 것: 다시실행, 다중 선택, 복사/붙여넣기, 라인 추가/삭제, 루프, 시크, 줌, 저장/불러오기, 샘플 음원. 악기는 전부 오실레이터 신스다.
+아직 없는 것: 다시실행, 다중 선택, 복사/붙여넣기, 라인 추가/삭제, 루프, 시크, 줌, 샘플 음원. 악기는 전부 오실레이터 신스다.
 
 설계 근거는 `docs/superpowers/specs/`에 있다.
 

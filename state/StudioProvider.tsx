@@ -73,6 +73,8 @@ export type StudioValue = {
   position: { bar: number; beat: number };
   supported: boolean;
   error: string | null;
+  /** 트랜스포트 바의 문구 자리에 한 줄을 띄운다. 파일 불러오기 실패에 쓴다. */
+  setError: (message: string | null) => void;
   play: () => void;
   stop: () => void;
   setTempo: (bpm: number) => void;
@@ -81,6 +83,8 @@ export type StudioValue = {
   selection: TileRef | null;
   select: (ref: TileRef | null) => void;
   edit: TileEditHandlers;
+  /** 곡을 통째로 교체한다. 실행취소 스택에 쌓이므로 Ctrl+Z로 되돌린다. */
+  loadSong: (song: Song) => void;
   undo: () => void;
   canUndo: boolean;
   editable: boolean;
@@ -93,6 +97,7 @@ export function StudioProvider({ children }: { children: React.ReactNode }) {
   const {
     song,
     commitWith,
+    replaceWithoutHistory,
     undo: undoSong,
     canUndo,
   } = useSongHistory(initialSong);
@@ -110,7 +115,8 @@ export function StudioProvider({ children }: { children: React.ReactNode }) {
     playingRef.current = isPlaying;
   }, [isPlaying]);
 
-  const [tempo, setTempoState] = useState(song.tempo);
+  // 템포는 song.tempo가 유일한 진실이다. 별도 state로 두면 슬라이더로 바꾼
+  // 값이 곡에 반영되지 않아, 저장한 파일에 곡을 만들 때의 옛 템포가 들어간다.
   const [metronome, setMetronomeState] = useState(false);
   const [position, setPosition] = useState({ bar: 1, beat: 1 });
   // SSR에서는 window가 없다. 마운트 후에 실제 값으로 교체된다.
@@ -216,10 +222,11 @@ export function StudioProvider({ children }: { children: React.ReactNode }) {
 
   const setTempo = useCallback(
     (bpm: number) => {
-      setTempoState(bpm);
+      // 히스토리에 쌓지 않는다. 드래그 한 번에 onChange가 수십 번 불린다.
+      replaceWithoutHistory((s) => ({ ...s, tempo: bpm }));
       getEngine().setTempo(bpm);
     },
-    [getEngine],
+    [getEngine, replaceWithoutHistory],
   );
 
   const setMetronome = useCallback(
@@ -288,6 +295,30 @@ export function StudioProvider({ children }: { children: React.ReactNode }) {
     [commitWith],
   );
 
+  const loadSong = useCallback(
+    (loaded: Song) => {
+      // 편집 핸들러와 같은 가드다. Engine.setSong은 재생 중이면 무시하는데,
+      // 곡을 갱신하는 effect는 song에만 반응하므로 정지해도 다시 맞춰주지
+      // 않는다. 재생 중에 불러오면 화면과 엔진이 영원히 갈라진다.
+      if (playingRef.current) return;
+
+      // 두 줄은 서로 다른 곳을 건드린다 — commitWith는 React 상태를,
+      // Engine.setTempo는 엔진의 bpm을. 순서는 상관없다.
+      //
+      // 엔진 쪽을 빼먹으면 안 된다. 곡을 갱신하는 effect는 setSong만 부르고
+      // setSong은 bpm을 건드리지 않으므로(engine.ts의 주석 참고), 불러온 곡의
+      // 템포가 엔진에 영원히 반영되지 않는다.
+      commitWith(() => loaded);
+      getEngine().setTempo(loaded.tempo);
+
+      // 불러온 곡에 이전 선택이 있을 리 없다. 안 지우면 존재하지 않는
+      // 타일의 팝오버가 떠 있게 된다.
+      setSelection(null);
+      setError(null);
+    },
+    [commitWith, getEngine],
+  );
+
   const undo = useCallback(() => {
     // 편집 핸들러와 같은 가드가 필요하다. Engine.setSong은 재생 중이면
     // 무시하는데, 곡을 갱신하는 effect는 song에만 반응하므로 정지해도 다시
@@ -297,6 +328,10 @@ export function StudioProvider({ children }: { children: React.ReactNode }) {
 
     const restored = undoSong();
     if (!restored) return;
+    // 템포가 곡 안에 있으므로 되돌리면 템포도 되돌아간다. 엔진의 bpm은
+    // setSong이 건드리지 않으니(engine.ts의 주석 참고) 여기서 맞춰야 한다.
+    // 안 맞추면 슬라이더와 실제 재생 속도가 영구히 갈라진다.
+    getEngine().setTempo(restored.tempo);
     // 생성을 되돌리면 선택된 타일이 사라진다. 그대로 두면 존재하지 않는
     // 타일의 팝오버가 떠 있게 된다.
     setSelection((prev) => {
@@ -305,17 +340,18 @@ export function StudioProvider({ children }: { children: React.ReactNode }) {
       const exists = line?.tiles.some((t) => t.id === prev.tileId);
       return exists ? prev : null;
     });
-  }, [undoSong]);
+  }, [undoSong, getEngine]);
 
   const value = useMemo<StudioValue>(
     () => ({
       song,
       isPlaying,
-      tempo,
+      tempo: song.tempo,
       metronome,
       position,
       supported,
       error,
+      setError,
       play,
       stop,
       setTempo,
@@ -324,6 +360,7 @@ export function StudioProvider({ children }: { children: React.ReactNode }) {
       selection,
       select,
       edit,
+      loadSong,
       undo,
       canUndo,
       editable,
@@ -331,11 +368,11 @@ export function StudioProvider({ children }: { children: React.ReactNode }) {
     [
       song,
       isPlaying,
-      tempo,
       metronome,
       position,
       supported,
       error,
+      setError,
       play,
       stop,
       setTempo,
@@ -344,6 +381,7 @@ export function StudioProvider({ children }: { children: React.ReactNode }) {
       selection,
       select,
       edit,
+      loadSong,
       undo,
       canUndo,
       editable,
