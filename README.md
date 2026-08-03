@@ -64,6 +64,7 @@ docs/                   문서
 | 문서 | 내용 |
 | --- | --- |
 | [곡 파일 형식](docs/song-file-format.md) | 저장/불러오기 `.json`의 구조와 검증 규칙. 손으로 고칠 때 참고 |
+| [알려진 공백](docs/known-gaps.md) | 무엇이 검증되지 않는지, 무엇이 미뤄졌는지. 작업 시작 전에 읽을 것 |
 | [`AGENTS.md`](AGENTS.md) | 프로젝트 개요와 절대 규칙 |
 | [`.claude/rules/`](.claude/rules/) | 아키텍처 경계, 오디오 엔진, UI 컨벤션, 디버깅 규칙 |
 | [`docs/superpowers/specs/`](docs/superpowers/specs/) | 각 기능 슬라이스의 설계 근거 |

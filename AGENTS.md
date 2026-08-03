@@ -36,7 +36,10 @@ This version has breaking changes — APIs, conventions, and file structure may 
 ```bash
 pnpm lint
 pnpm check-types
+pnpm test
 pnpm build
 ```
 
 정적 검사는 소리가 나는지 알려주지 않는다. 재생 동작이 바뀌었으면 `pnpm dev`로 실제로 들어보거나, 듣지 못했다고 명시할 것.
+
+**무엇이 검증되지 않는지는 `docs/known-gaps.md`에 있다.** `state/`와 `components/`에는 테스트가 없어서 최근 세 슬라이스의 심각한 결함이 전부 그 계층에서 나왔다. 그쪽 코드를 고쳤다면 통과한 검사 목록을 근거로 삼지 말 것.
