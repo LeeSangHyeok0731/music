@@ -18,9 +18,17 @@ import { DRUM_HIHAT, DRUM_KICK, DRUM_SNARE, PPQ } from "@/lib/score/types";
 const DOC_PATH = "docs/song-file-format.md";
 const doc = readFileSync(DOC_PATH, "utf8");
 
-/** 문서 안의 ```json 블록을 전부 뽑는다. */
+/**
+ * 문서 안의 ```json 블록을 전부 뽑는다.
+ *
+ * `\r?\n`이어야 한다. 저장소에는 LF로 커밋되지만 Windows에서 체크아웃하면
+ * `core.autocrlf`가 CRLF로 바꿔 놓는다. `\n`만 찾으면 CI(ubuntu)는 통과하고
+ * Windows 로컬만 깨진다 — 실제로 한 번 그렇게 새어 나갔다.
+ */
 function jsonBlocks(): string[] {
-  return [...doc.matchAll(/```json\n([\s\S]*?)```/g)].map((block) => block[1]);
+  return [...doc.matchAll(/```json\r?\n([\s\S]*?)```/g)].map(
+    (block) => block[1],
+  );
 }
 
 describe("문서의 JSON 예시", () => {
