@@ -1,5 +1,5 @@
-/** 4분음표 하나에 해당하는 틱 수. 모든 음악적 시간의 기준 단위. */
-export const PPQ = 480;
+/** 옛 모델이 살아 있는 동안만 둔다. 값이 갈라지지 않게 새 모델에서 재수출한다. */
+export { PPQ } from "./model";
 
 export type LineKind = "pitched" | "drum";
 

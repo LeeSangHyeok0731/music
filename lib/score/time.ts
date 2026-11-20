@@ -1,4 +1,4 @@
-import { PPQ } from "./types";
+import { PPQ, type Song } from "./model";
 
 export function ticksToSeconds(ticks: number, bpm: number): number {
   return (ticks / PPQ) * (60 / bpm);
@@ -32,4 +32,11 @@ export function ticksToBarBeat(
     bar: Math.floor(clamped / perBar) + 1,
     beat: Math.floor((clamped % perBar) / beat) + 1,
   };
+}
+
+/** 곡 전체 길이(틱). `lengthTicks` 필드는 없고 마디 수에서 파생한다. */
+export function songLengthTicks(
+  song: Pick<Song, "bars" | "timeSignature">,
+): number {
+  return song.bars * ticksPerBar(song.timeSignature);
 }
