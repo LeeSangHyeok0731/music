@@ -1,7 +1,7 @@
 # 코어 모델과 샘플 엔진 재설계
 
 작성일: 2026-11-20
-상태: 설계 승인됨, 구현 계획 전
+상태: 구현됨(계획 `docs/superpowers/plans/2026-11-20-core-model-sample-engine.md`의 Task 1~14). 실제 샘플 팩·`LICENSES.md`·예산 테스트·파일 형식 결정(Task 15)과 9절 4번의 직접 청취는 남아 있다. 구현 중 바뀐 점은 각 절에 반영했다.
 
 Bandline을 "음악 비전공자의 아이디어 스케치 도구"로 다시 잡는다. 이 문서는 그 재구상의 **하위 프로젝트 1** — 곡 데이터 모델과 샘플 기반 오디오 엔진 — 만 다룬다.
 
@@ -54,7 +54,8 @@ Note     { start, length, pitch: 0..127, velocity: 0..1 }
 
 - 시간 단위는 `PPQ = 480` 정수 틱이다. `Clip.start`, `Clip.length`, `Note.start`, `Note.length`는 모두 정수다.
 - `Note.start`는 **클립 시작 기준 상대 틱**이다. 클립을 옮겨도 음을 다시 쓰지 않는다.
-- 곡 길이는 `bars`(마디 수, 정수)이고 전체 틱은 `bars × ticksPerBar`로 파생한다. 상한은 500마디다. 음악적 제한이 아니라 렌더 비용 가드다.
+- 곡 길이는 `bars`(마디 수, 정수)이고 전체 틱은 `bars × ticksPerBar`로 파생한다. 상한은 500마디다(`MAX_BARS`). 음악적 제한이 아니라 렌더 비용 가드다.
+- `timeSignature`는 분자 1~32 정수(`MAX_BEATS_PER_BAR`), 분모 1·2·4·8·16·32(`BEAT_UNITS`)만 받는다. 박자표가 무제한이면 `bars × ticksPerBar`가 `MAX_BARS` 가드를 우회하고(구현 리뷰에서 `[1000000, 4]`가 통과하는 것을 발견했다), 분모를 2의 거듭제곱으로 두어야 `ticksPerBeat = PPQ × 4 / 분모`가 정수 틱으로 남는다. 최악의 곡 길이는 500마디 × 32박 × 1920틱 = 30,720,000틱이다.
 - `InstrumentId`는 `"piano" | "guitar" | "bass" | "drums"`로 시작한다. 현재 코드가 가진 4종과 같고, 일렉기타는 이 단계에서 만들지 않는다. 값을 늘리는 것은 하위 호환이다.
 - `Chord.quality`는 닫힌 열거형이다. 새 값은 추가만 한다. 새 값이 든 링크를 옛 앱이 열면, 조용히 다른 코드로 읽지 않고 **거부**한다.
 - 드럼 트랙은 `kind` 분기가 없다. 드럼 트랙의 음은 GM 드럼 번호를 `pitch`로 가진 일반 `Note`다. 스케줄러와 펼치기는 트랙 종류를 읽지 않는다.
@@ -67,6 +68,7 @@ Note     { start, length, pitch: 0..127, velocity: 0..1 }
 - `Clip.id`는 트랙 안에서, `Track.id`는 곡 안에서 유일하다.
 - `NotesBody.notes`는 `start` 오름차순이고, 모든 음은 클립 안에 들어간다: `0 <= note.start`, `note.start + note.length <= clip.length`.
 - `length >= 1` (틱). 길이 0인 클립·음은 만들지 않는다.
+- `bars`는 1~500 정수이고 `timeSignature`는 3.1절의 범위 안이다(`validateSong`의 `bars-out-of-range`, `invalid-time-signature`).
 
 겹침 불가는 편집 함수가 지킨다. 겹치는 곳에 클립을 놓으려 하면 놓을 수 없다(밀어내기 같은 자동 보정은 하지 않는다). 스키마 검증은 겹침을 **거부**한다 — 순서는 복구해도 겹침은 의도를 알 수 없다.
 
@@ -75,14 +77,17 @@ Note     { start, length, pitch: 0..127, velocity: 0..1 }
 패턴은 곡 파일에 저장하지 않는다. 코드에 내장한 카탈로그(`lib/score/patterns.ts`)에서 `PatternId`로 참조한다. 그래서 공유 URL이 작다.
 
 ```text
-Pattern { id, length, steps: PatternStep[] }          // length는 틱. 클립 길이에 맞춰 반복된다
+Pattern { id, kind: "harmonic" | "drum", length, steps: PatternStep[] }   // length는 틱. 클립 길이에 맞춰 반복된다
 PatternStep（화음 악기） { at, length, degree, octave, velocity }
 PatternStep（드럼）      { at, length, pitch, velocity }
 ```
 
-- 화음 악기 패턴의 `degree`는 코드 구성음의 순번이다(0 = 근음, 1 = 3음, 2 = 5음, 3 = 7음). `pitch`는 `Chord`와 `octave`에서 계산한다. 드럼 패턴은 코드를 읽지 않는다.
+- 화음 악기 패턴의 `degree`는 코드 구성음의 순번이다(0 = 근음, 1 = 3음, 2 = 5음, 3 = 7음). 구성음 수를 넘으면 한 옥타브씩 올려 감는다 — 3화음에서 degree 3은 한 옥타브 위 근음이다. `pitch`는 `Chord`와 `octave`에서 계산한다(`chordPitch`, C4=60). 드럼 패턴은 코드를 읽지 않는다.
+- `kind`가 트랙 악기와 맞아야 한다 — 드럼 트랙에는 `drum` 패턴만, 다른 트랙에는 `harmonic` 패턴만 쓴다(`validateSong`의 `pattern-instrument-mismatch`, `expandSong`은 던진다).
 - **패턴 id는 불변이다.** 패턴을 고치고 싶으면 새 id를 만든다. 옛 링크가 다른 소리로 재생되는 것을 막는 유일한 방법이다. 이 규칙은 테스트로 지킨다(5절).
 - 반복은 패턴 길이마다 끊고, 클립 끝을 넘는 음은 클립 끝에서 자른다.
+- 패턴 불변은 세 겹으로 지킨다: `patterns.test.ts`의 **패턴별 스냅샷**(기존 패턴의 내용 변경을 잡는다 — 배열 전체 스냅샷 하나로는 추가와 수정을 구분하지 못한다), 고정 id 목록 `FROZEN_PATTERN_IDS`(삭제를 잡는다 — 지운 패턴의 스냅샷은 실패하지 않고 '쓰이지 않는 스냅샷'이 될 뿐이다), `patterns.ts`가 모듈 로드 시 거는 깊은 `Object.freeze`(런타임 변형을 막는다). CI는 없는 스냅샷을 쓰지 않고 실패하므로 패턴을 추가하면 로컬에서 한 번 스냅샷을 기록해 함께 커밋한다.
+- 패턴은 4/4 한 마디(1920틱, `BAR_4_4`) 기준이다. 다른 박자에서는 패턴이 자기 길이로 반복되어 마디선과 어긋난다(`docs/known-gaps.md` 6절).
 
 펼치기는 순수 함수다.
 
@@ -94,7 +99,7 @@ ScheduledNote    { tick, length, pitch, velocity }      // tick은 곡 시작 �
 
 - `events`는 `tick` 오름차순이고 같은 `tick`은 입력 순서를 유지한다(안정 정렬). 정렬은 불변식이다.
 - **재생과 내보내기는 같은 `expandSong`을 쓴다.** 들은 것과 내보낸 것이 다를 수 없게 하는 구조다.
-- `bake(clip, track, song) → Clip`: `chord` 클립을 같은 `id`·`start`·`length`의 `notes` 클립으로 바꾼다. 한 방향이다. 음 단위 편집을 시작하면 이 변환이 먼저 일어나고, 되돌리기 스택에서는 이 변환이 한 칸이다.
+- `bakeClip(clip, instrument) → Clip`(곡 단위로는 `bakeClipInSong(song, trackId, clipId) → Song`): `chord` 클립을 같은 `id`·`start`·`length`의 `notes` 클립으로 바꾼다. 한 방향이다. 음 단위 편집을 시작하면 이 변환이 먼저 일어나고, 되돌리기 스택에서는 이 변환이 한 칸이다.
 - 악보 PDF 가져오기는 결국 `notes` 클립을 만드는 또 하나의 입력 경로다. 이 모델은 그 때문에 바뀌지 않는다.
 
 ### 3.4 작업자·서명 자리 (필드만 확정)
@@ -112,8 +117,10 @@ Author   { name, publicKey }
 
 zod 스키마가 구조를 검증한다. 기존 정책을 그대로 따른다.
 
-- **거부:** 구조가 틀림, 알 수 없는 `v`, 알 수 없는 `InstrumentId`·`Chord.quality`·`PatternId`, 클립 겹침, 클립이 곡 밖.
-- **복구하고 복구했다고 알림:** 정렬이 어긋남, 소수점이 있는 틱(반올림), 범위를 넘은 `velocity`(클램프), 클립 밖으로 나간 음(클립 끝에서 자름).
+- **거부:** 구조가 틀림, 알 수 없는 `v`, 알 수 없는 `InstrumentId`·`Chord.quality`·`PatternId`, 트랙 악기와 맞지 않는 패턴, 1틱 이상의 클립 겹침, 클립이 곡 밖, 3.1절 범위 밖의 박자표, 범위 밖의 `bars`, 중복된 트랙·클립 id, 길이가 1틱 미만인 클립·음, 0~127 밖이거나 정수가 아닌 `pitch`.
+- **복구하고 복구했다고 알림:** 정렬이 어긋남(클립·음을 `start` 순으로 다시 정렬), 소수점이 있는 틱(반올림), 범위를 넘은 `velocity`(0~1로 클램프), 템포(정수로 반올림한 뒤 40~240으로 클램프), 클립 끝을 넘는 음(클립 끝에서 자름), 클립 밖에서 시작하는 음(버림).
+- 소수 틱은 `start`와 `length`를 따로 반올림하지 않고 **양 끝점**을 반올림한다(클립과 음 모두). 따로 하면 맞닿은 구간이 1틱 겹치거나 끝에 닿은 구간이 1틱 넘친다. 그래서 겹침·곡 끝·클립 끝 판정은 반올림한 정수 끝점으로 하고, 1틱 미만의 겹침·초과는 반올림이 흡수한다.
+- 순서: zod 구조 검증 → 복구(`repair`) → 불변식 검증(`validateSong`). 진입점은 `parseSong`이다.
 - 유한한 수만 받는다(`Infinity`, `NaN` 거부).
 
 ## 4. 오디오 엔진 (`lib/audio/`)
@@ -140,28 +147,38 @@ React를 import하지 않는다. UI는 명령형 메서드로만 이 레이어�
 3. 트랙 구성(id·instrument 순서)이 바뀌었으면 악기 맵을 다시 채우고
 4. 곡에 쓰인 악기의 샘플 로딩을 요청한다
 
-재생 중에는 `setSong`을 거부한다(트랙 커서가 이벤트 인덱스라, 재생 중 이벤트가 바뀌면 노트가 조용히 누락된다). 재생 중 허용되는 곡 변경은 `setTempo`뿐이다.
+재생 중에는 `setSong`이 `false`를 돌려주고 아무것도 바꾸지 않는다(트랙 커서가 이벤트 인덱스라, 재생 중 이벤트가 바뀌면 노트가 조용히 누락된다). 재생 중 허용되는 곡 변경은 `setTempo`뿐이다.
+
+구현에서 정한 것:
+
+- `false`는 소리가 나는 동안만이 아니라 `play()`가 기다리는 구간 전체에서 돌아온다. `play()`는 첫 await 전에 재생 플래그를 올리고, 컨텍스트 재개와 샘플 준비를 기다리는 동안 내리지 않는다(`isPlaying()`도 그동안 `true`다). UI는 이 구간을 "재생 중"으로 표시하지 말고 `false`를 처리해야 한다.
+- **예외 안전:** `setSong`은 재생 가드 바로 뒤에서 무엇보다 먼저 `expandSong`을 부른다. 잘못된 곡(모르는 패턴 id, 트랙 악기와 맞지 않는 패턴)이면 여기서 던지고 엔진은 아무것도 바뀌지 않는다. 새 악기 맵도 지역 변수에 다 만든 뒤에 곡·이벤트·템포와 함께 바꿔 끼운다. 그 뒤에 샘플 `prefetch`를 요청한다. 호출부는 넘기기 전에 `validateSong`/`parseSong`으로 검증한다.
 
 ### 4.3 샘플 계층
 
 ```text
-SampleBank   악기별 샘플 로딩·디코드·캐시
-             load(instrument) → Promise<void>
-             status(instrument) → "idle" | "loading" | "ready" | "error"
+SampleBank   악기별 샘플 로딩·디코드·캐시 (엔진·악기는 SamplePort 인터페이스로 본다)
+             prefetch(instruments)            // AudioContext 없이 파일만 받는다
+             ensureReady(ctx, instruments) → Promise<{ ok: true } | { ok: false, failed }>  // 디코드
+             zoneFor(instrument, pitch) → { buffer, rate } | null   // ready가 아니면 null
+             status(instrument) → "idle" | "loading" | "downloaded" | "ready" | "error"
+             subscribe(listener) / getSnapshot()   // useSyncExternalStore용
 Instrument   play(pitch, when, dur, velocity)           // 시그니처는 옛 설계와 같다
 ```
 
+`downloaded`는 받았지만 AudioContext가 없어 디코드를 못 한 상태다. 화면이 "불러오는 중"으로 거짓말하지 않게 한다. 실패한 악기는 `error`가 되고, 다시 `prefetch`/`ensureReady`를 부르면 새로 받는다.
+
 - **`Instrument.play()` 시그니처는 바꾸지 않는다.** 스케줄러·엔진·테스트가 악기 구현과 분리된 채 남는다. 구현만 오실레이터 신스에서 샘플 재생으로 바뀐다. 신스는 폴백으로도 남기지 않는다.
-- 악기마다 `public/samples/<instrument>/manifest.json`이 존(zone) 목록을 가진다: `{ file, centerPitch, loPitch, hiPitch }`.
+- 악기마다 `public/samples/<instrument>/manifest.json`이 `{ instrument, zones }`를 가진다. 존(zone)은 `{ file, centerPitch, loPitch, hiPitch }`이고 `loPitch <= centerPitch <= hiPitch`다(`lib/audio/samples/manifest.ts`). 어느 존도 덮지 않는 음은 범위까지 가장 가까운 존으로 낸다(조용히 무음이 되지 않게).
 - 음 높이는 `loPitch..hiPitch`를 덮는 존의 샘플을 `playbackRate = 2^((pitch - centerPitch) / 12)`로 보정해 만든다. 건반마다 샘플을 두지 않고 몇 음 간격으로만 둔다.
-- 드럼은 GM 번호마다 샘플 하나이고 음높이 보정을 하지 않는다.
-- 음 길이는 `when + dur`에 짧은 릴리즈 페이드로 끝낸다. 샘플이 음 길이보다 길면 페이드로 자르고, 짧으면 그대로 끝난다.
+- 드럼은 GM 번호마다 샘플 하나이고 음높이 보정을 하지 않는다. 샘플러는 드럼이면 뱅크가 돌려준 속도와 무관하게 `playbackRate`를 1로 고정하고, 음 길이와 무관하게 샘플이 스스로 끝날 때까지 울리는 원샷으로 튼다(페이드 없음).
+- 음이 있는 악기는 `when + dur`까지 유지한 뒤 0.08초(`RELEASE`) 릴리즈 페이드로 끝낸다. 샘플이 음 길이보다 길면 페이드로 자르고, 짧으면 그대로 끝난다.
 - `AudioBufferSourceNode`는 일회용이다. 노트마다 새로 만들고 `onended`에서 `disconnect()`한다. `decodeAudioData`는 악기당 한 번, 캐시된 `AudioBuffer`를 재사용한다.
 - 샘플 파일 형식은 대상 브라우저(Chrome, Firefox, Safari 데스크톱·모바일)가 전부 디코드하는 하나로 정한다. 구현 계획의 첫 작업에서 Safari 디코드를 직접 확인하고 확정한다.
 
 **지연 로딩:** 곡에 실제로 쓰인 악기의 샘플만 받는다. 공유 링크를 열면 그 곡의 트랙 목록으로 필요한 악기를 알 수 있다.
 
-**재생 전 보장:** 곡이 쓰는 악기가 하나라도 `ready`가 아니면 `play()`는 소리를 시작하지 않고 로딩 상태를 돌려준다. 로딩되지 않은 악기가 조용히 무음이 되는 경로를 만들지 않는다. 옛 설계에서 라인이 조용히 무음이 된 사고가 있었다.
+**재생 전 보장:** 곡이 쓰는 악기가 하나라도 `ready`가 아니면 `play()`는 소리를 시작하지 않고 로딩 상태를 돌려준다. 로딩되지 않은 악기가 조용히 무음이 되는 경로를 만들지 않는다. 옛 설계에서 라인이 조용히 무음이 된 사고가 있었다. `play()`는 `PlayResult`(`playing`/`already-playing`/`superseded`/`not-ready`)를 돌려주고, await가 둘(`ensureRunning`, 샘플 준비 `ensureReady`)이며 둘 다 뒤에서 세션을 다시 확인한다. `ensureRunning`이 먼저다 — 샘플 대기를 앞에 두면 느린 네트워크에서 사용자 제스처 창이 지나 `resume()`이 거부된다. 샘플 받기(fetch)는 컨텍스트 없이 엔진 생성자와 `setSong`에서 시작하고, 디코드는 컨텍스트가 생긴 `play()`에서 한다.
 
 **다운로드 예산:** 첫 재생에 필요한 샘플 총량은 **약 5MB 이내**, 악기당 약 1MB 안팎이다. 이 값은 테스트로 지킨다(5절).
 
@@ -187,7 +204,7 @@ Instrument   play(pitch, when, dur, velocity)           // 시그니처는 옛 �
 
 - 데모 곡(코드 클립 몇 개와 `notes` 클립 하나, 드럼 트랙 포함)을 코드에 내장해 불러온다.
 - 재생/정지, 템포 슬라이더, 메트로놈 토글.
-- 악기별 샘플 로딩 상태(`idle`/`loading`/`ready`/`error`)와 실패 시 재시도 버튼.
+- 악기별 샘플 로딩 상태(`idle`/`loading`/`downloaded`/`ready`/`error`)와 실패 시 재시도 버튼.
 - 현재 마디·박(10Hz 샘플링). 플레이헤드처럼 매 프레임 바뀌는 값은 엔진 안에만 있고 `useState`에 넣지 않는다.
 
 ## 7. 테스트 전략

@@ -6,21 +6,33 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 # Bandline
 
-브라우저에서 직접 작곡하고 재생하는 웹 시퀀서. 피아노 / 어쿠스틱 기타 / 일렉기타 / 드럼 / 베이스를 한 타임라인 위에서 다룬다.
+브라우저에서 곡 아이디어를 스케치하고 재생하는 웹 시퀀서. 피아노 / 기타 / 베이스 / 드럼 4종을 다룬다.
 
 ## 현재 상태
 
-타임라인에서 곡을 편집하고 재생하고 파일로 저장할 수 있다. `lib/score/`(곡 데이터·시간 변환·편집 함수·파일 형식), `lib/audio/`(AudioContext·look-ahead 스케줄러·신스 악기 4종), `state/`, `components/timeline/`, `components/transport/`가 실제로 존재한다.
+음악 비전공자의 아이디어 스케치 도구로 **재구상 중**이다. 곡은 "코드·패턴 클립"과 "음 클립"으로 만들고, 브라우저에서 샘플 음원으로 재생한다. 재구상은 하위 프로젝트로 나뉘어 있고, 지금 끝난 것은 하위 프로젝트 1(코어 모델 + 샘플 엔진)이다. 설계는 `docs/superpowers/specs/2026-11-20-core-model-sample-engine-design.md`에 있다.
 
-16마디 데모 곡(`lib/score/fixture.ts`)으로 시작해서, 타일을 찍고 옮기고 늘리고 지울 수 있다. 드럼은 격자 칸 토글로 만들고 드래그로 이어 칠한다. 타일을 클릭하면 음·세기·길이를 고치는 팝오버가 뜬다. `Ctrl+Z`로 되돌린다.
+**지금 있는 것:**
+- `lib/score/` — 곡 모델 v2(`model.ts`: `Song`/`Track`/`Clip`/`Note`), 코드 음정(`chords.ts`), 패턴 카탈로그(`patterns.ts`), 펼치기·베이크(`expand.ts`: `expandSong`/`bakeClip`), 불변식 검증(`validate.ts`), zod 스키마와 복구(`song-schema.ts`: `parseSong`), 8마디 데모 곡(`demo-song.ts`), 실행취소 순수 규칙(`history.ts`)
+- `lib/audio/` — AudioContext, look-ahead 스케줄러, 보이스 풀, 메트로놈, `SampleBank`(`samples/`), 샘플 악기(`instruments/sampler.ts`), `Engine`
+- `components/verify/VerifyScreen.tsx` — `/`에 뜨는 소리 확인 화면. 데모 곡 재생/정지, 템포, 메트로놈, 악기별 샘플 상태와 다시 시도. **편집 UI가 아니다**
 
-곡은 JSON 파일로 저장하고 다시 불러온다. 불러오기도 실행취소 스택에 쌓이므로 `Ctrl+Z`로 되돌린다. 파일 형식과 검증 규칙은 `docs/song-file-format.md`에 있다 — 손으로 고친 파일도 받으므로 zod 스키마(`lib/score/schema.ts`)가 구조를 거부하고 정렬·범위는 복구한다.
+편집 UI와 `state/` 계층은 **없다.** 옛 타임라인·피아노롤·상태 계층은 재구상에서 철거했다.
 
-**템포는 `song.tempo`가 유일한 진실이다.** 슬라이더가 곡을 갱신하고, 곡을 통째로 바꾸는 경로(`loadSong`, `undo`)는 엔진에 `setTempo`를 직접 불러야 한다 — `Engine.setSong`은 `bpm`을 건드리지 않는다. 빠뜨리면 화면과 실제 재생 속도가 갈라지고 스스로 낫지 않는다.
+**곡 모델의 규칙**
+- 시간은 `PPQ = 480` 정수 틱이다. 음의 `start`는 클립 시작 기준 **상대 틱**이다. 곡 길이는 `bars × ticksPerBar`로 파생한다(`lengthTicks` 필드는 없다). `bars`는 1~500(`MAX_BARS`).
+- 박자표는 분자 1~32 정수(`MAX_BEATS_PER_BAR`), 분모 1·2·4·8·16·32(`BEAT_UNITS`)만 받는다. 렌더 비용 가드(500마디 × 유한한 마디 길이)이자 `ticksPerBeat`를 정수로 두기 위해서다.
+- **같은 트랙의 클립은 겹치지 않는다.** 화음(같은 시각의 여러 음)은 `notes` 클립 안에서 항상 된다.
+- **패턴 id는 불변이다.** 고치려면 새 id를 만든다 — 아니면 이미 공유된 곡의 소리가 말없이 달라진다. `lib/score/patterns.test.ts`의 패턴별 스냅샷(내용 변경)과 `FROZEN_PATTERN_IDS`(삭제), `patterns.ts`의 모듈 로드 시 깊은 freeze(런타임 변형)가 지킨다. CI는 없는 스냅샷을 쓰지 않으므로 패턴을 추가하면 로컬에서 한 번 테스트를 돌려 스냅샷을 기록하고 함께 커밋한다. 패턴은 4/4 한 마디(1920틱) 기준이라 다른 박자에서는 마디선과 어긋난다(`docs/known-gaps.md`).
+- 재생은 `expandSong`으로 편 이벤트를 쓴다. 오디오 내보내기(하위 프로젝트 4)도 같은 함수를 써야 한다.
 
-**편집은 정지 중에만 된다** — 재생 중 타임라인은 읽기 전용이다. 스케줄러의 커서가 `tiles[]` 인덱스라 재생 중 곡이 바뀌면 노트가 조용히 누락된다.
+**템포는 `song.tempo`가 유일한 진실이다.** `Engine.setSong`이 곡·이벤트·템포·악기 맵을 한 번에 맞추므로 호출부가 `setTempo`를 따로 부를 필요가 없다. `setSong`은 먼저 `expandSong`을 부르므로, 잘못된 곡이면 예외를 던지고 엔진은 아무것도 바뀌지 않는다 — 넘기기 전에 `validateSong`/`parseSong`으로 검증한다.
 
-아직 없는 것: 다시실행, 다중 선택, 복사/붙여넣기, 라인 추가/삭제, 루프, 시크, 줌, 샘플 음원. 악기는 전부 오실레이터 신스다.
+**재생 중에는 곡을 바꿀 수 없다.** 스케줄러의 트랙별 커서가 이벤트 인덱스라 재생 중 이벤트가 바뀌면 노트가 조용히 누락된다. 그래서 `setSong`은 재생 중 `false`를 돌려주고 아무것도 바꾸지 않는다. 재생 중 곡에 대해 허용되는 변경은 `setTempo`뿐이다. 이 `false`(그리고 `isPlaying() === true`)는 `play()`가 기다리는 구간 — 컨텍스트 재개와 **샘플 로딩 대기**까지 — 에도 해당한다. 앞으로의 편집 UI는 이 구간을 "재생 중"으로 표시하지 말고, `setSong`의 `false`를 반드시 처리해야 한다.
+
+**샘플은 컨텍스트 없이 받고, 컨텍스트가 생긴 뒤에 디코드한다.** 엔진 생성자와 `setSong`이 `prefetch`로 파일만 받고, `play()`가 `ensureReady`로 디코드한다. `Engine.play()`는 `PlayResult`(`playing`/`already-playing`/`superseded`/`not-ready`)를 돌려주고, 곡이 쓰는 악기가 하나라도 준비되지 않으면 소리를 시작하지 않는다(`not-ready`). `play()`에는 await가 둘(`ensureRunning`, 샘플 준비)이고 둘 다 뒤에서 세션 번호를 다시 확인한다.
+
+아직 없는 것: **편집 UI(하위 프로젝트 2), 링크 공유·서명 검증·모바일 재생 뷰(3), 오디오 내보내기(4), 악보 PDF 가져오기(5)**, 곡 파일 저장·불러오기 UI(곡을 읽는 `parseSong`만 있다), 다시실행, 루프, 시크, 줌. 실제 샘플 팩은 아직 커밋되지 않았다 — `public/samples/`는 gitignore이고, 개발용 톤을 `pnpm gen:dev-samples`로 만든다(실제 팩·`LICENSES.md`·예산 테스트는 계획 Task 15, 사람이 필요하다).
 
 설계 근거는 `docs/superpowers/specs/`에 있다.
 
