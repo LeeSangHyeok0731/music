@@ -118,6 +118,16 @@ describe("Scheduler", () => {
     const first = sink.events.find((e) => e.trackId === "track-piano")!;
     expect(first.pitch).toBe(60);
     expect(first.vel).toBe(0.7);
+
+    // 드럼 트랙도 각 이벤트의 pitch·velocity가 자기 트랙 id로 그대로 간다.
+    // tick 0에 하이햇(42, 0.5)과 킥(36, 0.9)이 함께 있다.
+    const drums = sink.events.filter((e) => e.trackId === "track-drums");
+    const hihat = drums.find((e) => e.pitch === DRUM_HIHAT);
+    const kick = drums.find((e) => e.pitch === DRUM_KICK);
+    expect(hihat).toBeDefined();
+    expect(hihat!.vel).toBe(0.5);
+    expect(kick).toBeDefined();
+    expect(kick!.vel).toBe(0.9);
   });
 
   it("같은 이벤트를 두 번 예약하지 않는다", () => {
@@ -170,8 +180,15 @@ describe("Scheduler", () => {
     c.currentTime = 10;
     const sch = new Scheduler(demoEvents(), TEMPO, c, s2);
     sch.start(10.5);
+    // 시계가 10초면 horizon(10.1)이 앵커(10.5)보다 앞이라 아무것도 예약되지
+    // 않고, 빈 배열의 every는 늘 참이다. 앵커 직전까지 굴려 tick 0의
+    // 이벤트가 lookahead 구간(10.45~10.55)에 들어오게 한다.
+    c.currentTime = 10.45;
     sch.advance();
+    expect(s2.events.length).toBeGreaterThan(0);
     expect(s2.events.every((e) => e.when >= 10.5)).toBe(true);
+    const firstPiano = s2.events.find((e) => e.trackId === "track-piano")!;
+    expect(firstPiano.when).toBeCloseTo(10.5, 9);
   });
 
   it("이벤트가 없는 트랙만 있어도 바로 끝난 상태다", () => {

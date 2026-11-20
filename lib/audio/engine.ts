@@ -194,9 +194,22 @@ export class Engine {
    * 조용히 무시하거나(무음) 옛 악기로 재생한다. ctx/pool이 아직 없으면(한 번도
    * play()하지 않았거나 dispose된 뒤라면) 다시 채울 그래프 자체가 없다 —
    * 다음 buildGraph()가 새 곡의 트랙으로 정확히 채운다.
+   *
+   * `false`는 소리가 나는 동안만이 아니라 play()의 콜드 스타트 await 창
+   * 안에서도 돌아온다 — play()는 첫 await 전에 이미 playing을 true로 올린다.
+   *
+   * 잘못된 곡(모르는 패턴 id, 트랙 악기와 맞지 않는 패턴)이면 `expandSong`이
+   * 예외를 던지고, 그때 엔진은 **아무것도 바뀌지 않는다**(곡·이벤트·템포·
+   * 악기 맵 모두 그대로). 그래서 무엇이든 바꾸기 전에 먼저 편다. 호출부는
+   * 넘기기 전에 `validateSong`/`parseSong`으로 검증해야 한다.
    */
   setSong(song: Song): boolean {
     if (this.playing) return false;
+
+    // 곡이 잘못됐을 때 던지는 단계라 맨 앞에 둔다. 여기서 던지면 아래의 어떤
+    // 대입도 일어나지 않는다 — 새 악기 맵에 옛 이벤트가 남아 무음이 되거나,
+    // 새 곡 길이에 옛 이벤트가 걸려 일찍 멈추는 반쪽 상태가 생기지 않는다.
+    const events = expandSong(song);
 
     if (this.ctx && this.pool && !sameTrackComposition(this.song, song)) {
       this.instruments.clear();
@@ -209,7 +222,7 @@ export class Engine {
     }
 
     this.song = song;
-    this.events = expandSong(song);
+    this.events = events;
     this.bpm = song.tempo;
     return true;
   }

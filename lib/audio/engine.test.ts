@@ -1,8 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Engine, type AudioContextProvider } from "@/lib/audio/engine";
-import { FakeAudioContext, asAudioContext } from "@/lib/audio/testing/fake-audio";
-import type { Song } from "@/lib/score/model";
+import { midiToFreq } from "@/lib/audio/env";
+import {
+  FakeAudioContext,
+  FakeScheduledSource,
+  asAudioContext,
+} from "@/lib/audio/testing/fake-audio";
+import type { ClipBody, Song } from "@/lib/score/model";
 import { songWithNotes } from "@/lib/score/testing/builders";
 
 const TIMER_MS = 25;
@@ -271,31 +276,181 @@ describe("Engine setSong — 템포와 재생 중 거부", () => {
   });
 
   it("재생 중 setSong은 거부하고 곡도 템포도 바꾸지 않는다", async () => {
+    // 템포만 보면, false를 돌려주기 전에 곡·이벤트·악기 맵을 먼저 갈아끼운
+    // 구현도 통과한다. 거부된 곡이 정말 아무 데도 스며들지 않았는지는 다시
+    // 재생해서 "무엇이 울리는가"로만 알 수 있다.
+    const ctx = new FakeAudioContext();
     const engine = new Engine(
-      songWithTrack("t", 60),
-      immediateProvider(new FakeAudioContext()),
+      songWithTrack("track-old", 60),
+      immediateProvider(ctx),
     );
     await engine.play();
+    tick(ctx);
 
-    const applied = engine.setSong({ ...songWithTrack("t", 60), tempo: 90 });
+    const applied = engine.setSong({
+      ...songWithTrack("track-new", 67),
+      tempo: 90,
+    });
 
     expect(applied).toBe(false);
     expect(engine.getTempo()).toBe(120);
+
+    engine.stop();
+    const before = oscillators(ctx).length;
+
+    await engine.play();
+    tick(ctx);
+
+    const added = oscillators(ctx).slice(before);
+    // 옛 트랙이 여전히 울린다 — 곡·이벤트·맵이 옛 것으로 서로 맞아 있다
+    expect(added.length).toBeGreaterThan(0);
+    // 울리는 것은 옛 음(60)이다. 거부된 곡(track-new, 67)이 이벤트와 맵에
+    // 함께 들어갔다면 67이, 한쪽만 들어갔다면 무음이 된다. 피아노의 첫
+    // 부분음은 ratio 1이라 주파수가 곧 그 음의 기음이다.
+    expect(added[0].frequency.calls[0].value).toBeCloseTo(midiToFreq(60), 6);
+    expect(
+      added.some(
+        (osc) => Math.abs(osc.frequency.calls[0].value! - midiToFreq(67)) < 1e-6,
+      ),
+    ).toBe(false);
     engine.stop();
   });
 
   it("재생 중에도 setTempo는 허용된다", async () => {
+    // getTempo()만 보면 엔진 필드만 바꾸고 스케줄러에 전달하지 않는 구현도
+    // 통과한다. 그 경우 화면의 템포와 실제로 예약되는 간격이 갈라진다.
+    // 그래서 setTempo 이후에 예약된 음의 시작 시각을 직접 본다.
+    const ctx = new FakeAudioContext();
     const engine = new Engine(
-      songWithTrack("t", 60),
-      immediateProvider(new FakeAudioContext()),
+      songWithNotes({
+        bars: 2,
+        notes: [
+          { start: 0, length: 480, velocity: 0.7, pitch: 60 },
+          { start: 1920, length: 480, velocity: 0.7, pitch: 64 },
+        ],
+      }),
+      immediateProvider(ctx),
     );
+    // 시작 시각 0.05초. 첫 onTimer가 horizon 0.1초 = 48틱까지 예약한다.
     await engine.play();
 
-    engine.setTempo(100);
+    // 스케줄러는 예약이 끝난 경계(48틱 @ 0.1초)에 재앵커하고 240BPM을 넣는다.
+    engine.setTempo(240);
+    expect(engine.getTempo()).toBe(240);
 
-    expect(engine.getTempo()).toBe(100);
+    // 2.5초까지 — 틀린 경우의 시각(2.05초)도 창 안에 들어와 값으로 드러난다
+    for (let i = 0; i < 100; i++) tick(ctx);
+
+    const secondNoteStart = oscillators(ctx)
+      .map((osc) => osc.startedAt!)
+      .find((when) => when > 0.5);
+    expect(secondNoteStart).toBeDefined();
+    // 240BPM: 0.1 + (1920 - 48) / 480 * (60 / 240) = 1.075초.
+    // 스케줄러에 전달되지 않았다면 120BPM 그대로 0.05 + 2 = 2.05초다.
+    expect(secondNoteStart!).toBeCloseTo(1.075, 6);
     engine.stop();
   });
+});
+
+/** 지금까지 만들어진 오실레이터. 악기까지 도달한 음의 관찰 지점이다. */
+function oscillators(ctx: FakeAudioContext) {
+  return ctx.created.filter(
+    (n): n is FakeScheduledSource & {
+      frequency: { calls: Array<{ value: number | null }> };
+    } => n.kind === "oscillator",
+  );
+}
+
+/**
+ * 4마디 곡. 맨 앞과 마지막 마디(5760틱)에 음이 하나씩 있다.
+ *
+ * 마지막 음이 120BPM에서 정확히 6초 뒤에 울리는지가, 엔진이 쥔 곡(길이)·
+ * 이벤트·템포·악기 맵이 서로 맞는지를 한 번에 보여 준다. 곡이 다른 것으로
+ * 바뀌었으면 자동 정지가 먼저 오고, 템포가 바뀌었으면 시각이 어긋나고,
+ * 맵이 바뀌었으면 아예 안 울린다.
+ */
+function fourBarSong(trackId: string): Song {
+  return songWithNotes({
+    trackId,
+    bars: 4,
+    notes: [
+      { start: 0, length: 480, velocity: 0.7, pitch: 60 },
+      { start: 5760, length: 480, velocity: 0.7, pitch: 64 },
+    ],
+  });
+}
+
+/** `expandSong`이 던지는 1마디·90BPM 곡. 클립 본문만 잘못된 패턴으로 바꾼다. */
+function invalidSong(trackId: string, body: ClipBody): Song {
+  const base = songWithNotes({ trackId, bars: 1, tempo: 90, notes: [] });
+  const [track] = base.tracks;
+  const [clip] = track.clips;
+  return { ...base, tracks: [{ ...track, clips: [{ ...clip, body }] }] };
+}
+
+describe("Engine setSong — 잘못된 곡은 엔진을 바꾸지 않는다", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it.each([
+    {
+      name: "알 수 없는 패턴, 같은 트랙 id",
+      trackId: "track-old",
+      body: {
+        type: "chord",
+        chord: { root: 0, quality: "maj" },
+        pattern: "no-such-pattern",
+      },
+    },
+    {
+      name: "피아노 트랙의 드럼 패턴, 다른 트랙 id",
+      trackId: "track-new",
+      body: {
+        type: "chord",
+        chord: { root: 0, quality: "maj" },
+        pattern: "drum-basic-rock",
+      },
+    },
+  ] satisfies Array<{ name: string; trackId: string; body: ClipBody }>)(
+    "$name: 예외를 던지고 옛 곡이 그대로 재생된다",
+    async ({ trackId, body }) => {
+      const ctx = new FakeAudioContext();
+      const engine = new Engine(fourBarSong("track-old"), immediateProvider(ctx));
+
+      // 한 번 재생해 그래프를 만든다. ctx/pool이 있어야 setSong이 악기 맵을
+      // 다시 채우는 경로를 탄다 — 그 경로가 없으면 맵 오염을 볼 수 없다.
+      await engine.play();
+      tick(ctx);
+      engine.stop();
+
+      expect(() => engine.setSong(invalidSong(trackId, body))).toThrow();
+      // 잘못된 곡은 90BPM이다. 반쯤 적용됐다면 여기서 보인다.
+      expect(engine.getTempo()).toBe(120);
+
+      const before = oscillators(ctx).length;
+      const startedAt = ctx.currentTime + 0.05; // START_DELAY
+      await engine.play();
+      for (let i = 0; i < 280; i++) tick(ctx); // 7초까지
+
+      const added = oscillators(ctx).slice(before);
+      // 옛 트랙의 첫 음이 울린다 — 악기 맵이 옛 트랙 id 그대로다
+      expect(added.some((o) => Math.abs(o.startedAt! - startedAt) < 1e-6)).toBe(
+        true,
+      );
+      // 옛 곡의 마지막 마디 음이 120BPM 그대로 6초 뒤에 울린다 — 엔진이 쥔
+      // 곡은 여전히 4마디이고(1마디 곡이 들어왔다면 그 전에 자동 정지한다)
+      // 템포도 옛 값이다.
+      expect(
+        added.some((o) => Math.abs(o.startedAt! - (startedAt + 6)) < 1e-6),
+      ).toBe(true);
+      engine.stop();
+    },
+  );
 });
 
 describe("Engine 자동 정지", () => {
