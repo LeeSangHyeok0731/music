@@ -1,390 +1,406 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`패턴 카탈로그 > 패턴 id는 불변이다 — 스냅샷이 바뀌면 옛 링크의 소리가 달라진다 1`] = `
-[
-  {
-    "id": "piano-block",
-    "kind": "harmonic",
-    "length": 1920,
-    "steps": [
-      {
-        "at": 0,
-        "degree": 0,
-        "length": 1920,
-        "octave": 4,
-        "velocity": 0.7,
-      },
-      {
-        "at": 0,
-        "degree": 1,
-        "length": 1920,
-        "octave": 4,
-        "velocity": 0.7,
-      },
-      {
-        "at": 0,
-        "degree": 2,
-        "length": 1920,
-        "octave": 4,
-        "velocity": 0.7,
-      },
-    ],
-  },
-  {
-    "id": "piano-arpeggio-8th",
-    "kind": "harmonic",
-    "length": 1920,
-    "steps": [
-      {
-        "at": 0,
-        "degree": 0,
-        "length": 240,
-        "octave": 4,
-        "velocity": 0.6,
-      },
-      {
-        "at": 240,
-        "degree": 1,
-        "length": 240,
-        "octave": 4,
-        "velocity": 0.6,
-      },
-      {
-        "at": 480,
-        "degree": 2,
-        "length": 240,
-        "octave": 4,
-        "velocity": 0.6,
-      },
-      {
-        "at": 720,
-        "degree": 1,
-        "length": 240,
-        "octave": 4,
-        "velocity": 0.6,
-      },
-      {
-        "at": 960,
-        "degree": 0,
-        "length": 240,
-        "octave": 4,
-        "velocity": 0.6,
-      },
-      {
-        "at": 1200,
-        "degree": 1,
-        "length": 240,
-        "octave": 4,
-        "velocity": 0.6,
-      },
-      {
-        "at": 1440,
-        "degree": 2,
-        "length": 240,
-        "octave": 4,
-        "velocity": 0.6,
-      },
-      {
-        "at": 1680,
-        "degree": 1,
-        "length": 240,
-        "octave": 4,
-        "velocity": 0.6,
-      },
-    ],
-  },
-  {
-    "id": "guitar-strum-quarter",
-    "kind": "harmonic",
-    "length": 1920,
-    "steps": [
-      {
-        "at": 0,
-        "degree": 0,
-        "length": 450,
-        "octave": 3,
-        "velocity": 0.6,
-      },
-      {
-        "at": 15,
-        "degree": 1,
-        "length": 450,
-        "octave": 3,
-        "velocity": 0.6,
-      },
-      {
-        "at": 30,
-        "degree": 2,
-        "length": 450,
-        "octave": 3,
-        "velocity": 0.6,
-      },
-      {
-        "at": 480,
-        "degree": 0,
-        "length": 450,
-        "octave": 3,
-        "velocity": 0.6,
-      },
-      {
-        "at": 495,
-        "degree": 1,
-        "length": 450,
-        "octave": 3,
-        "velocity": 0.6,
-      },
-      {
-        "at": 510,
-        "degree": 2,
-        "length": 450,
-        "octave": 3,
-        "velocity": 0.6,
-      },
-      {
-        "at": 960,
-        "degree": 0,
-        "length": 450,
-        "octave": 3,
-        "velocity": 0.6,
-      },
-      {
-        "at": 975,
-        "degree": 1,
-        "length": 450,
-        "octave": 3,
-        "velocity": 0.6,
-      },
-      {
-        "at": 990,
-        "degree": 2,
-        "length": 450,
-        "octave": 3,
-        "velocity": 0.6,
-      },
-      {
-        "at": 1440,
-        "degree": 0,
-        "length": 450,
-        "octave": 3,
-        "velocity": 0.6,
-      },
-      {
-        "at": 1455,
-        "degree": 1,
-        "length": 450,
-        "octave": 3,
-        "velocity": 0.6,
-      },
-      {
-        "at": 1470,
-        "degree": 2,
-        "length": 450,
-        "octave": 3,
-        "velocity": 0.6,
-      },
-    ],
-  },
-  {
-    "id": "bass-root-quarter",
-    "kind": "harmonic",
-    "length": 1920,
-    "steps": [
-      {
-        "at": 0,
-        "degree": 0,
-        "length": 420,
-        "octave": 2,
-        "velocity": 0.8,
-      },
-      {
-        "at": 480,
-        "degree": 0,
-        "length": 420,
-        "octave": 2,
-        "velocity": 0.8,
-      },
-      {
-        "at": 960,
-        "degree": 0,
-        "length": 420,
-        "octave": 2,
-        "velocity": 0.8,
-      },
-      {
-        "at": 1440,
-        "degree": 0,
-        "length": 420,
-        "octave": 2,
-        "velocity": 0.8,
-      },
-    ],
-  },
-  {
-    "id": "bass-root-fifth",
-    "kind": "harmonic",
-    "length": 1920,
-    "steps": [
-      {
-        "at": 0,
-        "degree": 0,
-        "length": 900,
-        "octave": 2,
-        "velocity": 0.8,
-      },
-      {
-        "at": 960,
-        "degree": 2,
-        "length": 900,
-        "octave": 2,
-        "velocity": 0.8,
-      },
-    ],
-  },
-  {
-    "id": "drum-basic-rock",
-    "kind": "drum",
-    "length": 1920,
-    "steps": [
-      {
-        "at": 0,
-        "length": 240,
-        "pitch": 36,
-        "velocity": 0.9,
-      },
-      {
-        "at": 960,
-        "length": 240,
-        "pitch": 36,
-        "velocity": 0.9,
-      },
-      {
-        "at": 480,
-        "length": 240,
-        "pitch": 38,
-        "velocity": 0.8,
-      },
-      {
-        "at": 1440,
-        "length": 240,
-        "pitch": 38,
-        "velocity": 0.8,
-      },
-      {
-        "at": 0,
-        "length": 120,
-        "pitch": 42,
-        "velocity": 0.5,
-      },
-      {
-        "at": 240,
-        "length": 120,
-        "pitch": 42,
-        "velocity": 0.5,
-      },
-      {
-        "at": 480,
-        "length": 120,
-        "pitch": 42,
-        "velocity": 0.5,
-      },
-      {
-        "at": 720,
-        "length": 120,
-        "pitch": 42,
-        "velocity": 0.5,
-      },
-      {
-        "at": 960,
-        "length": 120,
-        "pitch": 42,
-        "velocity": 0.5,
-      },
-      {
-        "at": 1200,
-        "length": 120,
-        "pitch": 42,
-        "velocity": 0.5,
-      },
-      {
-        "at": 1440,
-        "length": 120,
-        "pitch": 42,
-        "velocity": 0.5,
-      },
-      {
-        "at": 1680,
-        "length": 120,
-        "pitch": 42,
-        "velocity": 0.5,
-      },
-    ],
-  },
-  {
-    "id": "drum-four-on-floor",
-    "kind": "drum",
-    "length": 1920,
-    "steps": [
-      {
-        "at": 0,
-        "length": 240,
-        "pitch": 36,
-        "velocity": 0.9,
-      },
-      {
-        "at": 480,
-        "length": 240,
-        "pitch": 36,
-        "velocity": 0.9,
-      },
-      {
-        "at": 960,
-        "length": 240,
-        "pitch": 36,
-        "velocity": 0.9,
-      },
-      {
-        "at": 1440,
-        "length": 240,
-        "pitch": 36,
-        "velocity": 0.9,
-      },
-      {
-        "at": 480,
-        "length": 240,
-        "pitch": 38,
-        "velocity": 0.7,
-      },
-      {
-        "at": 1440,
-        "length": 240,
-        "pitch": 38,
-        "velocity": 0.7,
-      },
-      {
-        "at": 240,
-        "length": 120,
-        "pitch": 42,
-        "velocity": 0.5,
-      },
-      {
-        "at": 720,
-        "length": 120,
-        "pitch": 42,
-        "velocity": 0.5,
-      },
-      {
-        "at": 1200,
-        "length": 120,
-        "pitch": 42,
-        "velocity": 0.5,
-      },
-      {
-        "at": 1680,
-        "length": 120,
-        "pitch": 42,
-        "velocity": 0.5,
-      },
-    ],
-  },
-]
+exports[`패턴 카탈로그 — 불변 > bass-root-fifth의 내용은 바뀌지 않는다 1`] = `
+{
+  "id": "bass-root-fifth",
+  "kind": "harmonic",
+  "length": 1920,
+  "steps": [
+    {
+      "at": 0,
+      "degree": 0,
+      "length": 900,
+      "octave": 2,
+      "velocity": 0.8,
+    },
+    {
+      "at": 960,
+      "degree": 2,
+      "length": 900,
+      "octave": 2,
+      "velocity": 0.8,
+    },
+  ],
+}
+`;
+
+exports[`패턴 카탈로그 — 불변 > bass-root-quarter의 내용은 바뀌지 않는다 1`] = `
+{
+  "id": "bass-root-quarter",
+  "kind": "harmonic",
+  "length": 1920,
+  "steps": [
+    {
+      "at": 0,
+      "degree": 0,
+      "length": 420,
+      "octave": 2,
+      "velocity": 0.8,
+    },
+    {
+      "at": 480,
+      "degree": 0,
+      "length": 420,
+      "octave": 2,
+      "velocity": 0.8,
+    },
+    {
+      "at": 960,
+      "degree": 0,
+      "length": 420,
+      "octave": 2,
+      "velocity": 0.8,
+    },
+    {
+      "at": 1440,
+      "degree": 0,
+      "length": 420,
+      "octave": 2,
+      "velocity": 0.8,
+    },
+  ],
+}
+`;
+
+exports[`패턴 카탈로그 — 불변 > drum-basic-rock의 내용은 바뀌지 않는다 1`] = `
+{
+  "id": "drum-basic-rock",
+  "kind": "drum",
+  "length": 1920,
+  "steps": [
+    {
+      "at": 0,
+      "length": 240,
+      "pitch": 36,
+      "velocity": 0.9,
+    },
+    {
+      "at": 960,
+      "length": 240,
+      "pitch": 36,
+      "velocity": 0.9,
+    },
+    {
+      "at": 480,
+      "length": 240,
+      "pitch": 38,
+      "velocity": 0.8,
+    },
+    {
+      "at": 1440,
+      "length": 240,
+      "pitch": 38,
+      "velocity": 0.8,
+    },
+    {
+      "at": 0,
+      "length": 120,
+      "pitch": 42,
+      "velocity": 0.5,
+    },
+    {
+      "at": 240,
+      "length": 120,
+      "pitch": 42,
+      "velocity": 0.5,
+    },
+    {
+      "at": 480,
+      "length": 120,
+      "pitch": 42,
+      "velocity": 0.5,
+    },
+    {
+      "at": 720,
+      "length": 120,
+      "pitch": 42,
+      "velocity": 0.5,
+    },
+    {
+      "at": 960,
+      "length": 120,
+      "pitch": 42,
+      "velocity": 0.5,
+    },
+    {
+      "at": 1200,
+      "length": 120,
+      "pitch": 42,
+      "velocity": 0.5,
+    },
+    {
+      "at": 1440,
+      "length": 120,
+      "pitch": 42,
+      "velocity": 0.5,
+    },
+    {
+      "at": 1680,
+      "length": 120,
+      "pitch": 42,
+      "velocity": 0.5,
+    },
+  ],
+}
+`;
+
+exports[`패턴 카탈로그 — 불변 > drum-four-on-floor의 내용은 바뀌지 않는다 1`] = `
+{
+  "id": "drum-four-on-floor",
+  "kind": "drum",
+  "length": 1920,
+  "steps": [
+    {
+      "at": 0,
+      "length": 240,
+      "pitch": 36,
+      "velocity": 0.9,
+    },
+    {
+      "at": 480,
+      "length": 240,
+      "pitch": 36,
+      "velocity": 0.9,
+    },
+    {
+      "at": 960,
+      "length": 240,
+      "pitch": 36,
+      "velocity": 0.9,
+    },
+    {
+      "at": 1440,
+      "length": 240,
+      "pitch": 36,
+      "velocity": 0.9,
+    },
+    {
+      "at": 480,
+      "length": 240,
+      "pitch": 38,
+      "velocity": 0.7,
+    },
+    {
+      "at": 1440,
+      "length": 240,
+      "pitch": 38,
+      "velocity": 0.7,
+    },
+    {
+      "at": 240,
+      "length": 120,
+      "pitch": 42,
+      "velocity": 0.5,
+    },
+    {
+      "at": 720,
+      "length": 120,
+      "pitch": 42,
+      "velocity": 0.5,
+    },
+    {
+      "at": 1200,
+      "length": 120,
+      "pitch": 42,
+      "velocity": 0.5,
+    },
+    {
+      "at": 1680,
+      "length": 120,
+      "pitch": 42,
+      "velocity": 0.5,
+    },
+  ],
+}
+`;
+
+exports[`패턴 카탈로그 — 불변 > guitar-strum-quarter의 내용은 바뀌지 않는다 1`] = `
+{
+  "id": "guitar-strum-quarter",
+  "kind": "harmonic",
+  "length": 1920,
+  "steps": [
+    {
+      "at": 0,
+      "degree": 0,
+      "length": 450,
+      "octave": 3,
+      "velocity": 0.6,
+    },
+    {
+      "at": 15,
+      "degree": 1,
+      "length": 450,
+      "octave": 3,
+      "velocity": 0.6,
+    },
+    {
+      "at": 30,
+      "degree": 2,
+      "length": 450,
+      "octave": 3,
+      "velocity": 0.6,
+    },
+    {
+      "at": 480,
+      "degree": 0,
+      "length": 450,
+      "octave": 3,
+      "velocity": 0.6,
+    },
+    {
+      "at": 495,
+      "degree": 1,
+      "length": 450,
+      "octave": 3,
+      "velocity": 0.6,
+    },
+    {
+      "at": 510,
+      "degree": 2,
+      "length": 450,
+      "octave": 3,
+      "velocity": 0.6,
+    },
+    {
+      "at": 960,
+      "degree": 0,
+      "length": 450,
+      "octave": 3,
+      "velocity": 0.6,
+    },
+    {
+      "at": 975,
+      "degree": 1,
+      "length": 450,
+      "octave": 3,
+      "velocity": 0.6,
+    },
+    {
+      "at": 990,
+      "degree": 2,
+      "length": 450,
+      "octave": 3,
+      "velocity": 0.6,
+    },
+    {
+      "at": 1440,
+      "degree": 0,
+      "length": 450,
+      "octave": 3,
+      "velocity": 0.6,
+    },
+    {
+      "at": 1455,
+      "degree": 1,
+      "length": 450,
+      "octave": 3,
+      "velocity": 0.6,
+    },
+    {
+      "at": 1470,
+      "degree": 2,
+      "length": 450,
+      "octave": 3,
+      "velocity": 0.6,
+    },
+  ],
+}
+`;
+
+exports[`패턴 카탈로그 — 불변 > piano-arpeggio-8th의 내용은 바뀌지 않는다 1`] = `
+{
+  "id": "piano-arpeggio-8th",
+  "kind": "harmonic",
+  "length": 1920,
+  "steps": [
+    {
+      "at": 0,
+      "degree": 0,
+      "length": 240,
+      "octave": 4,
+      "velocity": 0.6,
+    },
+    {
+      "at": 240,
+      "degree": 1,
+      "length": 240,
+      "octave": 4,
+      "velocity": 0.6,
+    },
+    {
+      "at": 480,
+      "degree": 2,
+      "length": 240,
+      "octave": 4,
+      "velocity": 0.6,
+    },
+    {
+      "at": 720,
+      "degree": 1,
+      "length": 240,
+      "octave": 4,
+      "velocity": 0.6,
+    },
+    {
+      "at": 960,
+      "degree": 0,
+      "length": 240,
+      "octave": 4,
+      "velocity": 0.6,
+    },
+    {
+      "at": 1200,
+      "degree": 1,
+      "length": 240,
+      "octave": 4,
+      "velocity": 0.6,
+    },
+    {
+      "at": 1440,
+      "degree": 2,
+      "length": 240,
+      "octave": 4,
+      "velocity": 0.6,
+    },
+    {
+      "at": 1680,
+      "degree": 1,
+      "length": 240,
+      "octave": 4,
+      "velocity": 0.6,
+    },
+  ],
+}
+`;
+
+exports[`패턴 카탈로그 — 불변 > piano-block의 내용은 바뀌지 않는다 1`] = `
+{
+  "id": "piano-block",
+  "kind": "harmonic",
+  "length": 1920,
+  "steps": [
+    {
+      "at": 0,
+      "degree": 0,
+      "length": 1920,
+      "octave": 4,
+      "velocity": 0.7,
+    },
+    {
+      "at": 0,
+      "degree": 1,
+      "length": 1920,
+      "octave": 4,
+      "velocity": 0.7,
+    },
+    {
+      "at": 0,
+      "degree": 2,
+      "length": 1920,
+      "octave": 4,
+      "velocity": 0.7,
+    },
+  ],
+}
 `;

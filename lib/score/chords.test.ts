@@ -38,4 +38,20 @@ describe("chordPitch", () => {
     expect(chordPitch({ root: 0, quality: "maj7" }, 3, 4)).toBe(71);
     expect(chordPitch({ root: 0, quality: "min7" }, 3, 4)).toBe(70);
   });
+
+  it("7화음에서 degree 4는 한 옥타브 위 근음이다", () => {
+    // C dom7 옥타브 4: 근음 60 → degree 4는 72
+    expect(chordPitch({ root: 0, quality: "dom7" }, 4, 4)).toBe(72);
+    expect(chordPitch(G_DOM7, 4, 3)).toBe(55 + 12);
+  });
+
+  it.each([-1, 1.5, Number.NaN])(
+    "degree가 음이 아닌 정수가 아니면(%s) RangeError를 던진다",
+    (degree) => {
+      expect(() => chordPitch(C_MAJ, degree, 4)).toThrow(RangeError);
+      expect(() => chordPitch(C_MAJ, degree, 4)).toThrow(
+        "degree는 0 이상의 정수여야 합니다",
+      );
+    },
+  );
 });

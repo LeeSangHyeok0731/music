@@ -11,7 +11,8 @@ import {
  *
  * **패턴 id는 불변이다.** 이미 공유된 링크가 같은 소리로 재생되려면 한 번
  * 낸 id의 내용을 바꿀 수 없다. 고치고 싶으면 새 id를 만들고, 옛 것은
- * 그대로 둔다. `patterns.test.ts`의 스냅샷이 이를 지킨다.
+ * 그대로 둔다. `patterns.test.ts`의 패턴별 스냅샷(내용 변경)과 고정 id
+ * 목록(삭제)이 이를 지키고, 아래의 깊은 freeze가 런타임 변형을 막는다.
  *
  * 시간은 틱이고 4/4 한 마디(1920)를 기준으로 만들었다. 다른 박자에서는
  * 패턴이 자기 길이로 반복되어 마디선과 어긋날 수 있다 — 편집 UI가 4/4만
@@ -21,25 +22,35 @@ export const BAR_4_4 = PPQ * 4;
 
 export type HarmonicStep = {
   /** 패턴 시작 기준 틱. */
-  at: number;
-  length: number;
+  readonly at: number;
+  readonly length: number;
   /** 코드 구성음 순번. 0=근음, 1=3음, 2=5음, 3=7음(3화음이면 한 옥타브 위 근음). */
-  degree: number;
-  octave: number;
-  velocity: number;
+  readonly degree: number;
+  readonly octave: number;
+  readonly velocity: number;
 };
 
 export type DrumStep = {
-  at: number;
-  length: number;
+  readonly at: number;
+  readonly length: number;
   /** GM 드럼 번호. */
-  pitch: number;
-  velocity: number;
+  readonly pitch: number;
+  readonly velocity: number;
 };
 
 export type Pattern =
-  | { id: string; kind: "harmonic"; length: number; steps: HarmonicStep[] }
-  | { id: string; kind: "drum"; length: number; steps: DrumStep[] };
+  | {
+      readonly id: string;
+      readonly kind: "harmonic";
+      readonly length: number;
+      readonly steps: readonly HarmonicStep[];
+    }
+  | {
+      readonly id: string;
+      readonly kind: "drum";
+      readonly length: number;
+      readonly steps: readonly DrumStep[];
+    };
 
 const range = (n: number) => Array.from({ length: n }, (_, i) => i);
 
@@ -144,13 +155,25 @@ export const PATTERNS: readonly Pattern[] = [
   },
 ];
 
+// 카탈로그는 모든 곡이 공유한다. 호출자가 실수로 바꾸면 그 순간부터 같은 id가
+// 다른 소리를 내므로, 모듈 로드 시 스텝까지 깊게 얼린다(readonly 타입의 런타임 짝).
+for (const p of PATTERNS) {
+  for (const s of p.steps) Object.freeze(s);
+  Object.freeze(p.steps);
+  Object.freeze(p);
+}
+Object.freeze(PATTERNS);
+
 const BY_ID = new Map(PATTERNS.map((p) => [p.id, p]));
 
 export function getPattern(id: string): Pattern | undefined {
   return BY_ID.get(id);
 }
 
-/** 악기에 쓸 수 있는 패턴. 드럼은 드럼 패턴만, 나머지는 화음 패턴만이다. */
+/**
+ * 악기에 쓸 수 있는 패턴. 드럼은 드럼 패턴만, 나머지는 화음 패턴만이다.
+ * 매번 새 배열을 돌려준다 — 호출자가 배열을 바꿔도 카탈로그에는 영향이 없다.
+ */
 export function patternsFor(instrument: InstrumentId): Pattern[] {
   const kind = instrument === "drums" ? "drum" : "harmonic";
   return PATTERNS.filter((p) => p.kind === kind);

@@ -16,8 +16,13 @@ const INTERVALS: Record<ChordQuality, readonly number[]> = {
  * `degree`가 구성음 수를 넘으면 한 옥타브씩 올려 감는다 — 3화음에서
  * degree 3은 한 옥타브 위 근음이다. 그래서 패턴 하나가 3화음과 7화음에
  * 모두 쓰인다.
+ *
+ * `degree`가 음수·소수·NaN이면 배열 밖을 읽어 `NaN` 음이 조용히 나오므로 던진다.
  */
 export function chordPitch(chord: Chord, degree: number, octave: number): number {
+  if (!Number.isInteger(degree) || degree < 0) {
+    throw new RangeError(`degree는 0 이상의 정수여야 합니다: ${degree}`);
+  }
   const tones = INTERVALS[chord.quality];
   const wraps = Math.floor(degree / tones.length);
   const tone = tones[degree % tones.length];
