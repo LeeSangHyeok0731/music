@@ -142,8 +142,12 @@ export class SampleBank implements SamplePort {
 
   /**
    * 옛 시도의 늦게 도착한 결과는 버린다 — 지금 항목이 아니면 아무것도 하지 않는다.
-   * 같은 항목이 ready가 된 뒤에는 loading/downloaded로 되돌아가지 않는다
-   * (늦게 도착한 알림이 소리를 낼 수 있는 악기를 못 내는 것처럼 보이게 하면 안 된다).
+   *
+   * 아래의 `ready → loading/downloaded` 가드는 **현재 순서로는 도달할 수 없는
+   * 방어용 가드**다. loading은 항목을 만들 때 동기로 알리고, downloaded 처리기는
+   * startFetch가 decode의 `await fetched`보다 먼저 달아 두므로(같은 약속의
+   * 처리기는 단 순서대로 불린다) 같은 항목에서 ready보다 늦게 올 수 없다. 순서가
+   * 바뀌어도 소리를 낼 수 있는 악기를 못 내는 것처럼 보이게 하지 않으려고 남긴다.
    */
   private publish(
     instrument: InstrumentId,
@@ -214,15 +218,16 @@ export class SampleBank implements SamplePort {
   }
 
   private decode(ctx: Decoder, instrument: InstrumentId): Promise<void> {
-    const existing = this.entries.get(instrument);
-    if (existing?.status === "ready") return Promise.resolve();
-    // 이미 디코드 중이면 같은 약속을 돌려준다 — 두 번 디코드하지 않는다.
-    if (existing?.decoding) return existing.decoding;
-
+    // 지금 시도를 먼저 정한다. 진행 중이거나 끝난 시도는 그대로 돌아오고, error인
+    // 시도는 startFetch가 새 항목으로 바꾼다. 맵을 따로 읽어 먼저 판정하지 않는다 —
+    // error를 알리는 리스너 안에서 재진입하면 실패한 디코드의 약속이 아직 그
+    // 항목에 걸려 있어(finally 전), 거기 합류하면 재시도 없이 같이 실패한다.
     const { entry, fetched } = this.startFetch(instrument);
-    // startFetch의 loading 알림 안에서 리스너가 ensureReady를 다시 불렀다면
-    // 이 항목의 디코드는 이미 시작됐다. 합류한다 — 덮어쓰면 두 번 디코드한다.
+    // 이미 ready면 다시 디코드하지 않는다. 디코드는 받은 바이트를 분리했으므로
+    // 다시 디코드하면 실패해 소리 나는 악기가 error로 떨어진다.
     if (entry.status === "ready") return Promise.resolve();
+    // 이미 디코드 중이면(앞선 호출, 또는 startFetch의 loading 알림 안에서 재진입한
+    // ensureReady) 같은 약속에 합류한다 — 덮어쓰면 두 번 디코드한다.
     if (entry.decoding) return entry.decoding;
 
     entry.decoding = (async () => {

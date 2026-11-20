@@ -292,6 +292,39 @@ describe("SampleBank — 재진입", () => {
     expect(bank.status("piano")).toBe("ready");
     expect(bank.zoneFor("piano", 60)).not.toBeNull();
   });
+
+  it("디코드 error 알림 안에서 구독자가 ensureReady를 부르면 죽어 가는 디코드에 합류하지 않고 새로 재시도한다", async () => {
+    const { bank, calls } = makeBank();
+    const ctx = new FakeAudioContext();
+    const dec = asAudioContext(ctx);
+    ctx.failDecode = true;
+
+    let retry: Promise<SampleReadiness> | null = null;
+    bank.subscribe(() => {
+      // 첫 error 알림에서 한 번만, 동기로 다시 부른다. 이 순간 실패한 디코드의
+      // 약속은 아직 항목에 걸려 있다(finally 전) — 거기 합류하면 재시도 없이 실패한다.
+      if (retry === null && bank.getSnapshot().piano === "error") {
+        ctx.failDecode = false;
+        retry = bank.ensureReady(dec, ["piano"]);
+      }
+    });
+
+    const outer = await bank.ensureReady(dec, ["piano"]);
+    expect(outer).toEqual({ ok: false, failed: ["piano"] });
+    expect(retry).not.toBeNull();
+    // 바깥 호출은 재시도가 끝나기 전에 풀리므로 재시도를 기다린 뒤에 상태를 본다
+    expect(await retry).toEqual({ ok: true });
+
+    expect(bank.status("piano")).toBe("ready");
+    expect(bank.zoneFor("piano", 60)).not.toBeNull();
+    // 디코드가 바이트를 분리했으므로 재시도는 다시 받아야 한다
+    expect(calls.filter((u) => u.endsWith("manifest.json"))).toHaveLength(2);
+    expect(decodedText(ctx.decoded)).toEqual([
+      "bytes:/samples/piano/c4.wav", // 실패한 첫 시도
+      "bytes:/samples/piano/c4.wav",
+      "bytes:/samples/piano/c5.wav",
+    ]);
+  });
 });
 
 describe("SampleBank — 실패와 재시도", () => {
