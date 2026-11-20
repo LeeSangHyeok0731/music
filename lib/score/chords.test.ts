@@ -45,6 +45,33 @@ describe("chordPitch", () => {
     expect(chordPitch(G_DOM7, 4, 3)).toBe(55 + 12);
   });
 
+  describe("모든 코드 종류의 degree 0~4 — 손으로 계산한 고정 표", () => {
+    // 공유 링크의 소리가 코드 구성음 간격에 달려 있다. 간격이 바뀌면 같은 링크가
+    // 말없이 다른 소리를 낸다. 아래 값은 구현을 부르거나 그 식을 옮겨 오지 않고
+    // 음이름에서 직접 적었다(C4=60). 3화음은 degree 3이 한 옥타브 위 근음,
+    // degree 4가 한 옥타브 위 3음이고, 7화음은 degree 4가 한 옥타브 위 근음이다.
+    const TABLE: Array<[string, Chord, number, readonly number[]]> = [
+      // C 옥타브 4
+      ["C maj 옥타브 4", { root: 0, quality: "maj" }, 4, [60, 64, 67, 72, 76]], // C4 E4 G4 C5 E5
+      ["C min 옥타브 4", { root: 0, quality: "min" }, 4, [60, 63, 67, 72, 75]], // C4 Eb4 G4 C5 Eb5
+      ["C dom7 옥타브 4", { root: 0, quality: "dom7" }, 4, [60, 64, 67, 70, 72]], // C4 E4 G4 Bb4 C5
+      ["C maj7 옥타브 4", { root: 0, quality: "maj7" }, 4, [60, 64, 67, 71, 72]], // C4 E4 G4 B4 C5
+      ["C min7 옥타브 4", { root: 0, quality: "min7" }, 4, [60, 63, 67, 70, 72]], // C4 Eb4 G4 Bb4 C5
+      // G 옥타브 3
+      ["G maj 옥타브 3", { root: 7, quality: "maj" }, 3, [55, 59, 62, 67, 71]], // G3 B3 D4 G4 B4
+      ["G min 옥타브 3", { root: 7, quality: "min" }, 3, [55, 58, 62, 67, 70]], // G3 Bb3 D4 G4 Bb4
+      ["G dom7 옥타브 3", { root: 7, quality: "dom7" }, 3, [55, 59, 62, 65, 67]], // G3 B3 D4 F4 G4
+      ["G maj7 옥타브 3", { root: 7, quality: "maj7" }, 3, [55, 59, 62, 66, 67]], // G3 B3 D4 F#4 G4
+      ["G min7 옥타브 3", { root: 7, quality: "min7" }, 3, [55, 58, 62, 65, 67]], // G3 Bb3 D4 F4 G4
+    ];
+
+    it.each(TABLE)("%s", (_name, chord, octave, expected) => {
+      expect([0, 1, 2, 3, 4].map((degree) => chordPitch(chord, degree, octave))).toEqual(
+        expected,
+      );
+    });
+  });
+
   it.each([-1, 1.5, Number.NaN])(
     "degree가 음이 아닌 정수가 아니면(%s) RangeError를 던진다",
     (degree) => {

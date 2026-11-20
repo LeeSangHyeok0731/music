@@ -394,6 +394,40 @@ describe("parseSong — 복구", () => {
     expect(body.notes).toEqual([{ start: 1, length: 1919, pitch: 60, velocity: 0.5 }]);
   });
 
+  it("1틱 미만의 클립 끝 초과는 음에서도 끝점 반올림이 흡수해 잘리지 않는다", () => {
+    // 실제 끝 0.5 + 1919.6 = 1920.1은 클립 끝(1920)을 0.1틱 넘지만 반올림한 끝점은
+    // 1920이라 [1, 1920)이 된다. '클립 끝에서 잘랐습니다'가 붙지 않는다.
+    const input = raw(songWithNotes({ notes: [note(0.5, 1919.6)] }));
+    const result = parseSong(input);
+    if (!result.ok) throw new Error(result.errors.join("\n"));
+    expect(result.repairs).toEqual(["소수 틱 2개를 정수로 반올림했습니다"]);
+    const body = result.song.tracks[0].clips[0].body;
+    if (body.type !== "notes") throw new Error("notes 클립이 아니다");
+    expect(body.notes).toEqual([{ start: 1, length: 1919, pitch: 60, velocity: 0.5 }]);
+  });
+
+  it("퇴화한 소수 음: 끝점이 다른 정수로 반올림되면 1틱 음으로 받는다", () => {
+    // [0.4, 0.6) → start round(0.4)=0, end round(0.6)=1 → [0, 1). 현재 동작을 고정한다.
+    const input = raw(songWithNotes({ notes: [note(0.4, 0.2)] }));
+    const result = parseSong(input);
+    if (!result.ok) throw new Error(result.errors.join("\n"));
+    expect(result.repairs).toEqual(["소수 틱 2개를 정수로 반올림했습니다"]);
+    const body = result.song.tracks[0].clips[0].body;
+    if (body.type !== "notes") throw new Error("notes 클립이 아니다");
+    expect(body.notes).toEqual([{ start: 0, length: 1, pitch: 60, velocity: 0.5 }]);
+  });
+
+  it("퇴화한 소수 음: 두 끝점이 같은 정수로 반올림되면 길이 0이라 거부한다", () => {
+    // [0.6, 0.8) → start round(0.6)=1, end round(0.8)=1 → 길이 0. 복구가 버리거나
+    // 늘리지 않고 그대로 두어 validateSong이 non-positive-length로 거부한다.
+    const input = raw(songWithNotes({ notes: [note(0.6, 0.2)] }));
+    const result = parseSong(input);
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("unreachable");
+    // '클립 길이는 1틱 이상'과 구분되도록 '음 길이'까지 본다.
+    expect(result.errors.join("\n")).toContain("음 길이는 1틱 이상");
+  });
+
   it("곡 끝에 닿은 클립은 끝점을 반올림해도 곡 안에 남는다", () => {
     const input = raw();
     input.tracks[0].clips[0] = {
