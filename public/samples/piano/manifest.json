@@ -1,0 +1,71 @@
+{
+  "instrument": "piano",
+  "zones": [
+    {
+      "file": "p36.wav",
+      "centerPitch": 36,
+      "loPitch": 0,
+      "hiPitch": 38
+    },
+    {
+      "file": "p42.wav",
+      "centerPitch": 42,
+      "loPitch": 39,
+      "hiPitch": 44
+    },
+    {
+      "file": "p48.wav",
+      "centerPitch": 48,
+      "loPitch": 45,
+      "hiPitch": 50
+    },
+    {
+      "file": "p54.wav",
+      "centerPitch": 54,
+      "loPitch": 51,
+      "hiPitch": 56
+    },
+    {
+      "file": "p60.wav",
+      "centerPitch": 60,
+      "loPitch": 57,
+      "hiPitch": 62
+    },
+    {
+      "file": "p66.wav",
+      "centerPitch": 66,
+      "loPitch": 63,
+      "hiPitch": 68
+    },
+    {
+      "file": "p72.wav",
+      "centerPitch": 72,
+      "loPitch": 69,
+      "hiPitch": 74
+    },
+    {
+      "file": "p78.wav",
+      "centerPitch": 78,
+      "loPitch": 75,
+      "hiPitch": 80
+    },
+    {
+      "file": "p84.wav",
+      "centerPitch": 84,
+      "loPitch": 81,
+      "hiPitch": 86
+    },
+    {
+      "file": "p90.wav",
+      "centerPitch": 90,
+      "loPitch": 87,
+      "hiPitch": 92
+    },
+    {
+      "file": "p96.wav",
+      "centerPitch": 96,
+      "loPitch": 93,
+      "hiPitch": 127
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "instrument": "drums",
+  "zones": [
+    {
+      "file": "kick.wav",
+      "centerPitch": 36,
+      "loPitch": 36,
+      "hiPitch": 36
+    },
+    {
+      "file": "snare.wav",
+      "centerPitch": 38,
+      "loPitch": 38,
+      "hiPitch": 38
+    },
+    {
+      "file": "hihat.wav",
+      "centerPitch": 42,
+      "loPitch": 42,
+      "hiPitch": 42
+    }
+  ]
+}

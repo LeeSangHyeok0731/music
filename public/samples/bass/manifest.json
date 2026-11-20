@@ -1,0 +1,47 @@
+{
+  "instrument": "bass",
+  "zones": [
+    {
+      "file": "p25.wav",
+      "centerPitch": 25,
+      "loPitch": 0,
+      "hiPitch": 27
+    },
+    {
+      "file": "p30.wav",
+      "centerPitch": 30,
+      "loPitch": 28,
+      "hiPitch": 32
+    },
+    {
+      "file": "p36.wav",
+      "centerPitch": 36,
+      "loPitch": 33,
+      "hiPitch": 38
+    },
+    {
+      "file": "p42.wav",
+      "centerPitch": 42,
+      "loPitch": 39,
+      "hiPitch": 44
+    },
+    {
+      "file": "p48.wav",
+      "centerPitch": 48,
+      "loPitch": 45,
+      "hiPitch": 50
+    },
+    {
+      "file": "p54.wav",
+      "centerPitch": 54,
+      "loPitch": 51,
+      "hiPitch": 56
+    },
+    {
+      "file": "p60.wav",
+      "centerPitch": 60,
+      "loPitch": 57,
+      "hiPitch": 127
+    }
+  ]
+}
