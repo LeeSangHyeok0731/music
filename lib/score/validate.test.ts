@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { Clip, Song } from "@/lib/score/model";
 import { songWithNotes } from "@/lib/score/testing/builders";
+import { ticksPerBar } from "@/lib/score/time";
 import { validateSong, type ScoreIssueCode } from "@/lib/score/validate";
 
 const note = (start: number, length: number, pitch = 60, velocity = 0.5) => ({
@@ -209,6 +210,40 @@ describe("validateSong — 곡과 패턴", () => {
       },
     ]);
     expect(codes(song)).toContain("pattern-instrument-mismatch");
+  });
+
+  it.each([
+    [4, 4],
+    [3, 4],
+    [6, 8],
+    [7, 8],
+    [5, 4],
+    [12, 8],
+    [2, 2],
+    [1, 1],
+  ])("박자표 %i/%i는 통과한다", (beats, unit) => {
+    const ts: [number, number] = [beats, unit];
+    const song = songWithNotes({ notes: [note(0, 480)] });
+    song.timeSignature = ts;
+    song.tracks[0].clips[0].length = ticksPerBar(ts);
+    expect(validateSong(song)).toEqual([]);
+  });
+
+  it.each([
+    [1000000, 4],
+    [33, 4],
+    [0, 4],
+    [4, 7],
+    [4, 3],
+    [4, 64],
+    [4.5, 4],
+  ])("박자표 %s/%s는 invalid-time-signature", (beats, unit) => {
+    const song = songWithNotes({ notes: [] });
+    song.timeSignature = [beats, unit];
+    const issue = validateSong(song).find(
+      (i) => i.code === "invalid-time-signature",
+    );
+    expect(issue?.path).toBe("timeSignature");
   });
 
   it("이슈에는 위치를 가리키는 path가 있다", () => {

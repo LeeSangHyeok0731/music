@@ -1,8 +1,10 @@
 import { z } from "zod";
 
 import {
+  BEAT_UNITS,
   CHORD_QUALITIES,
   INSTRUMENT_IDS,
+  MAX_BEATS_PER_BAR,
   MAX_TEMPO,
   MIN_TEMPO,
   SONG_VERSION,
@@ -66,9 +68,10 @@ const metaSchema = z.object({
 const songSchema = z.object({
   v: z.literal(SONG_VERSION),
   tempo: z.number(),
+  // 박자표는 곡 길이를 정하므로 구조 단계에서 상한을 건다(`model.ts` 참고).
   timeSignature: z.tuple([
-    z.number().int().positive(),
-    z.number().int().positive(),
+    z.number().int().min(1).max(MAX_BEATS_PER_BAR),
+    z.literal(BEAT_UNITS),
   ]),
   bars: z.number(),
   tracks: z.array(trackSchema).min(1),
@@ -97,7 +100,9 @@ export function parseSong(input: unknown): ParseResult {
   }
 
   const repairs: string[] = [];
-  const song = repair(parsed.data as Song, repairs);
+  // 캐스트하지 않는다 — 스키마와 모델이 어긋나면 check-types가 잡게 한다.
+  const data: Song = parsed.data;
+  const song = repair(data, repairs);
 
   const issues = validateSong(song);
   if (issues.length > 0) {
@@ -125,15 +130,24 @@ function repair(song: Song, repairs: string[]): Song {
     return next;
   };
 
-  const tempo = clamp(Math.round(song.tempo), MIN_TEMPO, MAX_TEMPO);
-  if (tempo !== song.tempo) {
+  const roundedTempo = Math.round(song.tempo);
+  const tempo = clamp(roundedTempo, MIN_TEMPO, MAX_TEMPO);
+  if (tempo !== roundedTempo) {
     repairs.push(`템포를 ${MIN_TEMPO}~${MAX_TEMPO} 범위로 고쳤습니다 (${song.tempo} → ${tempo})`);
+  } else if (roundedTempo !== song.tempo) {
+    repairs.push(`템포를 정수로 반올림했습니다 (${song.tempo} → ${tempo})`);
   }
 
   const tracks = song.tracks.map((track) => {
     let clips: Clip[] = track.clips.map((clip) => {
-      const start = round(clip.start);
-      const length = round(clip.length);
+      // start와 length를 따로 반올림하지 않고 양 끝점을 반올림한다. 따로 하면
+      // 맞닿은 클립이 1틱 겹치거나 곡 끝에 닿은 클립이 1틱 넘친다.
+      // 끝점이 뒤집혀 length ≤ 0이 되면 그대로 두어 validateSong이 거부하게 한다.
+      const start = Math.round(clip.start);
+      const end = Math.round(clip.start + clip.length);
+      const length = end - start;
+      if (start !== clip.start) rounded += 1;
+      if (length !== clip.length) rounded += 1;
 
       if (clip.body.type === "chord") {
         return { ...clip, start, length };

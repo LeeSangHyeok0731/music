@@ -19,6 +19,15 @@ export const MAX_TEMPO = 240;
  */
 export const MAX_BARS = 500;
 
+/**
+ * 박자표의 허용 범위. 곡 길이는 `bars × ticksPerBar(timeSignature)`라서
+ * 박자표가 무제한이면 `MAX_BARS`를 우회해 렌더 비용 가드가 뚫린다. 분모는
+ * 2의 거듭제곱만 받아 `ticksPerBeat = PPQ × 4 / 분모`가 정수 틱으로 남게 한다.
+ * 분자 1~32, 분모 1·2·4·8·16·32.
+ */
+export const MAX_BEATS_PER_BAR = 32;
+export const BEAT_UNITS = [1, 2, 4, 8, 16, 32] as const;
+
 /** GM 관행에 따른 드럼 번호. */
 export const DRUM_KICK = 36;
 export const DRUM_SNARE = 38;

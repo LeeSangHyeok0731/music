@@ -1,9 +1,17 @@
-import { MAX_BARS, type Clip, type Song, type Track } from "./model";
+import {
+  BEAT_UNITS,
+  MAX_BARS,
+  MAX_BEATS_PER_BAR,
+  type Clip,
+  type Song,
+  type Track,
+} from "./model";
 import { getPattern } from "./patterns";
 import { songLengthTicks } from "./time";
 
 export type ScoreIssueCode =
   | "bars-out-of-range"
+  | "invalid-time-signature"
   | "duplicate-id"
   | "non-integer-tick"
   | "non-positive-length"
@@ -38,6 +46,20 @@ export function validateSong(song: Song): ScoreIssue[] {
 
   if (!Number.isInteger(song.bars) || song.bars < 1 || song.bars > MAX_BARS) {
     add("bars-out-of-range", "bars", `마디 수는 1~${MAX_BARS}의 정수여야 합니다`);
+  }
+
+  const [beatsPerBar, beatUnit] = song.timeSignature;
+  if (
+    !Number.isInteger(beatsPerBar) ||
+    beatsPerBar < 1 ||
+    beatsPerBar > MAX_BEATS_PER_BAR ||
+    !(BEAT_UNITS as readonly number[]).includes(beatUnit)
+  ) {
+    add(
+      "invalid-time-signature",
+      "timeSignature",
+      `박자표는 분자 1~${MAX_BEATS_PER_BAR}의 정수, 분모 ${BEAT_UNITS.join("·")} 중 하나여야 합니다`,
+    );
   }
 
   const songLength = songLengthTicks(song);
