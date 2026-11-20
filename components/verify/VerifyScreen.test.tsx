@@ -11,7 +11,7 @@ import type { PlayResult } from "@/lib/audio/engine";
 import type { SampleStatus } from "@/lib/audio/samples/bank";
 import { buildDemoSong, DEMO_BARS } from "@/lib/score/demo-song";
 import type { InstrumentId } from "@/lib/score/model";
-import { songLengthTicks, ticksToBarBeat } from "@/lib/score/time";
+import { songLengthTicks } from "@/lib/score/time";
 
 type Statuses = Record<InstrumentId, SampleStatus>;
 
@@ -273,9 +273,11 @@ describe("VerifyScreen", () => {
       });
       act(() => vi.advanceTimersByTime(100));
 
-      const last = ticksToBarBeat(length - 1, song.timeSignature);
-      expect(last.bar).toBe(DEMO_BARS);
-      expect(screen.getByText(`${last.bar}마디 · ${last.beat}박`)).toBeTruthy();
+      // 기대값을 프로덕션 변환(ticksToBarBeat)으로 계산하지 않고 리터럴로 적는다.
+      // 데모가 8마디 4/4라서 마지막 틱은 8마디 4박이다 — 그 전제를 함께 고정한다.
+      expect(DEMO_BARS).toBe(8);
+      expect(song.timeSignature).toEqual([4, 4]);
+      expect(screen.getByText("8마디 · 4박")).toBeTruthy();
     });
   });
 

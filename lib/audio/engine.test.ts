@@ -307,9 +307,18 @@ describe("Engine setSong — 템포와 재생 중 거부", () => {
     // 템포만 보면, false를 돌려주기 전에 곡·이벤트·악기 맵을 먼저 갈아끼운
     // 구현도 통과한다. 거부된 곡이 정말 아무 데도 스며들지 않았는지는 다시
     // 재생해서 "무엇이 울리는가"로만 알 수 있다.
+    //
+    // 옛 곡(4마디)과 거부되는 곡(1마디)의 길이를 다르게 둔다. 길이가 같으면
+    // `song`만 먼저 대입하고 false를 돌려주는 구현이 통과한다 — 이벤트·맵은
+    // 옛 것이라 같은 음이 울리기 때문이다. 길이가 다르면 그 구현은 다시
+    // 재생했을 때 1마디 곡 끝에서 자동 정지한다.
     const ctx = new FakeAudioContext();
     const engine = makeEngine(
-      songWithTrack("track-old", 60),
+      songWithNotes({
+        trackId: "track-old",
+        bars: 4,
+        notes: [{ start: 0, length: 480, velocity: 0.7, pitch: 60 }],
+      }),
       immediateProvider(ctx),
       centeredBank(60),
     );
@@ -342,6 +351,12 @@ describe("Engine setSong — 템포와 재생 중 거부", () => {
         (s) => Math.abs(s.playbackRate.calls[0].value! - 2 ** (7 / 12)) < 1e-6,
       ),
     ).toBe(false);
+
+    // 120bpm 4/4에서 1마디는 2초다. 3초를 굴려도 옛 곡(4마디, 8초) 안이므로
+    // 계속 재생 중이어야 한다. 거부된 1마디 곡의 길이가 스며들었다면 여기서는
+    // 이미 곡 끝을 지나 자동 정지했다.
+    for (let i = 0; i < 3000 / TIMER_MS; i++) tick(ctx);
+    expect(engine.isPlaying()).toBe(true);
     engine.stop();
   });
 
@@ -722,13 +737,19 @@ describe("Engine 샘플 준비 보장", () => {
 
     release();
 
-    expect(await a).toEqual({ status: "superseded" });
-    expect(await b).toEqual({ status: "playing" });
-    expect(engine.isPlaying()).toBe(true);
+    const [resultA, resultB] = await Promise.all([a, b]);
+    const playingAfterBoth = engine.isPlaying();
 
     engine.stop();
     vi.advanceTimersByTime(5000);
+    // 증상(고아 타이머) 자체를 먼저 단언한다. 결과값을 먼저 보면 세션 확인이
+    // 빠진 구현에서 A의 결과로 먼저 실패해, 이 테스트가 지키려는 증상에
+    // 닿지 못한다. interval은 스스로 끝나지 않으므로 하나라도 살아 있으면 잡힌다.
     expect(vi.getTimerCount()).toBe(0);
+
+    expect(resultA).toEqual({ status: "superseded" });
+    expect(resultB).toEqual({ status: "playing" });
+    expect(playingAfterBoth).toBe(true);
   });
 
   it("이미 재생 중이면 already-playing이다", async () => {
