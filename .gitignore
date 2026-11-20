@@ -50,3 +50,6 @@ _workspace_*/
 .pr-tmp/
 .claude/command.log
 .superpowers/
+
+# 개발용 임시 톤 팩(scripts/gen-dev-samples.mjs). 실제 샘플 팩을 넣을 때(계획 Task 15) 이 줄을 지운다.
+/public/samples/

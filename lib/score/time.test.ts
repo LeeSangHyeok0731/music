@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { PPQ } from "@/lib/score/types";
+import { PPQ } from "@/lib/score/model";
 import {
   secondsToTicks,
+  songLengthTicks,
   ticksPerBar,
   ticksPerBeat,
   ticksToBarBeat,
@@ -86,5 +87,13 @@ describe("누적 오차", () => {
     // 10,000번 정도로는 차이가 미세하지만, 재생이 길어질수록 벌어진다.
     // 그래서 pos += delta 로 굴리지 않는다.
     expect(Math.abs(accumulated - direct)).toBeLessThan(1e-6);
+  });
+});
+
+describe("songLengthTicks", () => {
+  it("bars × ticksPerBar다", () => {
+    expect(songLengthTicks({ bars: 8, timeSignature: [4, 4] })).toBe(8 * 1920);
+    expect(songLengthTicks({ bars: 4, timeSignature: [3, 4] })).toBe(4 * 1440);
+    expect(songLengthTicks({ bars: 2, timeSignature: [6, 8] })).toBe(2 * 1440);
   });
 });
