@@ -57,7 +57,8 @@ describe("createSampler — 음이 있는 악기", () => {
 
   it("음 길이 뒤에 짧게 줄여 끝낸다 — 뚝 자르면 클릭이 난다", () => {
     const { ctx, pool, bank } = setup();
-    createSampler("bass", asAudioContext(ctx), pool, bank).play(40, 1.0, 0.5, 0.8);
+    const vel = 0.8;
+    createSampler("bass", asAudioContext(ctx), pool, bank).play(40, 1.0, 0.5, vel);
 
     const [source] = bufferSources(ctx);
     // 1.0 + 0.5(dur) + 릴리즈(0.08) 이후에 멈춘다
@@ -65,9 +66,30 @@ describe("createSampler — 음이 있는 악기", () => {
     const gain = ctx.created.find((n) => n.kind === "gain") as unknown as {
       gain: { calls: { method: string; value: number | null; time: number }[] };
     };
-    const ramp = gain.gain.calls.find((c) => c.method === "linearRampToValueAtTime");
-    expect(ramp?.value).toBe(0);
-    expect(ramp?.time).toBeCloseTo(1.58, 6);
+    const calls = gain.gain.calls;
+
+    // 시작 레벨: vel × SAMPLE_GAIN(sampler.ts의 0.8)
+    const attack = calls.find((c) => c.method === "setValueAtTime" && c.time === 1.0);
+    expect(attack?.value).toBeCloseTo(vel * 0.8, 9);
+
+    // 음 길이 끝(1.5)에 같은 레벨을 붙잡아야 램프가 거기서 시작한다. 이 점이
+    // 없으면 Web Audio는 직전 이벤트(1.0의 setValueAtTime)부터 램프를 그어
+    // 음 전체가 서서히 꺼진다.
+    const holdIndex = calls.findIndex(
+      (c) => c.method === "setValueAtTime" && Math.abs(c.time - 1.5) < 1e-9,
+    );
+    const rampIndex = calls.findIndex((c) => c.method === "linearRampToValueAtTime");
+    expect(holdIndex).toBeGreaterThanOrEqual(0);
+    expect(calls[holdIndex].value).toBe(attack?.value);
+    expect(rampIndex).toBeGreaterThan(holdIndex);
+
+    const ramp = calls[rampIndex];
+    expect(ramp.value).toBe(0);
+    expect(ramp.time).toBeCloseTo(1.58, 6);
+
+    // 풀은 릴리즈가 끝난 뒤에야 이 보이스를 회수해야 한다. 음 길이 끝(1.5)을
+    // 넘기면 reap이 램프 도중에 게인을 끊어, 바로 막으려던 클릭이 난다.
+    expect(pool.latestEndsAt()).toBeCloseTo(1.58, 6);
   });
 
   it("velocity가 클수록 소리가 크다", () => {
@@ -115,6 +137,8 @@ describe("createSampler — 드럼", () => {
     const [source] = bufferSources(ctx);
     expect(source.stoppedAt!).toBeGreaterThanOrEqual(1.5);
     expect(source.stoppedAt!).toBeLessThan(1.6);
+    // 풀도 음 길이(1.05)가 아니라 샘플 길이(1.0 + 0.5)까지 살아 있다고 본다.
+    expect(pool.latestEndsAt()).toBeCloseTo(1.5, 6);
   });
 
   it("드럼은 음 길이 뒤에 릴리즈 램프를 만들지 않는다", () => {

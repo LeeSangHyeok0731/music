@@ -240,8 +240,13 @@ export class Engine {
    * play()하지 않았거나 dispose된 뒤라면) 다시 채울 그래프 자체가 없다 —
    * 다음 buildGraph()가 새 곡의 트랙으로 정확히 채운다.
    *
-   * `false`는 소리가 나는 동안만이 아니라 play()의 콜드 스타트 await 창
-   * 안에서도 돌아온다 — play()는 첫 await 전에 이미 playing을 true로 올린다.
+   * `false`는 소리가 나는 동안만이 아니라 play()가 기다리는 창 전체에서도
+   * 돌아온다 — 콜드 스타트(ensureRunning)뿐 아니라 그 뒤의 샘플 로딩 대기
+   * (bank.ensureReady)까지다. play()는 첫 await 전에 이미 playing을 true로
+   * 올리고, not-ready·예외로 끝나거나 stop()이 불릴 때까지 내리지 않는다. 느린
+   * 네트워크에서는 이 창이 몇 초씩 간다. 그러니 UI 코드는 이 창에서
+   * `isPlaying()`을 "소리가 난다"로 취급하지 말고, setSong의 `false` 결과를
+   * 반드시 처리해야 한다.
    *
    * 잘못된 곡(모르는 패턴 id, 트랙 악기와 맞지 않는 패턴)이면 `expandSong`이
    * 예외를 던지고, 그때 엔진은 **아무것도 바뀌지 않는다**(곡·이벤트·템포·

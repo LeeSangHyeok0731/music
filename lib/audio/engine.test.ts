@@ -466,7 +466,12 @@ describe("Engine setSong — 잘못된 곡은 엔진을 바꾸지 않는다", ()
     "$name: 예외를 던지고 옛 곡이 그대로 재생된다",
     async ({ trackId, body }) => {
       const ctx = new FakeAudioContext();
-      const engine = makeEngine(fourBarSong("track-old"), immediateProvider(ctx));
+      const bank = new FakeSampleBank();
+      const engine = makeEngine(
+        fourBarSong("track-old"),
+        immediateProvider(ctx),
+        bank,
+      );
 
       // 한 번 재생해 그래프를 만든다. ctx/pool이 있어야 setSong이 악기 맵을
       // 다시 채우는 경로를 탄다 — 그 경로가 없으면 맵 오염을 볼 수 없다.
@@ -474,9 +479,12 @@ describe("Engine setSong — 잘못된 곡은 엔진을 바꾸지 않는다", ()
       tick(ctx);
       engine.stop();
 
+      const prefetchedBefore = bank.prefetched.length;
       expect(() => engine.setSong(invalidSong(trackId, body))).toThrow();
       // 잘못된 곡은 90BPM이다. 반쯤 적용됐다면 여기서 보인다.
       expect(engine.getTempo()).toBe(120);
+      // 거부된 곡의 샘플을 받으러 가지도 않는다
+      expect(bank.prefetched).toHaveLength(prefetchedBefore);
 
       const before = bufferSources(ctx).length;
       const startedAt = ctx.currentTime + 0.05; // START_DELAY
@@ -514,7 +522,8 @@ describe("Engine setSong — 악기 생성이 던져도 엔진을 바꾸지 않�
     // 새 곡의 첫 트랙만 든 반쪽이 된다. 옛 트랙 id를 못 찾아 옛 곡 전체가
     // 예외도 로그도 없이 무음이 된다.
     const ctx = new FakeAudioContext();
-    const engine = makeEngine(fourBarSong("track-old"), immediateProvider(ctx));
+    const bank = new FakeSampleBank();
+    const engine = makeEngine(fourBarSong("track-old"), immediateProvider(ctx), bank);
 
     // 그래프를 만들어야 setSong이 악기 맵을 다시 채우는 경로를 탄다.
     await engine.play();
@@ -526,11 +535,14 @@ describe("Engine setSong — 악기 생성이 던져도 엔진을 바꾸지 않�
     const bass = songWithNotes({ trackId: "track-b", instrument: "bass", notes: [] });
     const next: Song = { ...piano, tracks: [...piano.tracks, ...bass.tracks] };
 
+    const prefetchedBefore = bank.prefetched.length;
     instrumentFault.throwFor = "bass";
     expect(() => engine.setSong(next)).toThrow("악기 생성 실패: bass");
     instrumentFault.throwFor = null;
 
     expect(engine.getTempo()).toBe(120);
+    // 반영되지 않은 곡의 샘플을 받으러 가지도 않는다
+    expect(bank.prefetched).toHaveLength(prefetchedBefore);
 
     const before = bufferSources(ctx).length;
     const startedAt = ctx.currentTime + 0.05; // START_DELAY
@@ -630,11 +642,8 @@ describe("Engine 샘플 준비 보장", () => {
   it("곡이 쓰는 악기가 준비되지 않으면 소리를 시작하지 않고 not-ready를 돌려준다", async () => {
     const bank = new FakeSampleBank();
     bank.failing.add("piano");
-    const engine = makeEngine(
-      songWithTrack("t", 60),
-      immediateProvider(new FakeAudioContext()),
-      bank,
-    );
+    const ctx = new FakeAudioContext();
+    const engine = makeEngine(songWithTrack("t", 60), immediateProvider(ctx), bank);
 
     const result = await engine.play();
 
@@ -642,6 +651,9 @@ describe("Engine 샘플 준비 보장", () => {
     expect(engine.isPlaying()).toBe(false);
     // 타이머도 걸리지 않았다
     expect(vi.getTimerCount()).toBe(0);
+    // 그래프도 만들지 않았다 — 마스터 게인조차 없다. 준비 확인보다 먼저
+    // 그래프를 짓는 구현은 실패한 재생마다 노드를 남긴다.
+    expect(ctx.created).toHaveLength(0);
   });
 
   it("not-ready 뒤 다시 누르면 실제로 재시도된다", async () => {
@@ -682,6 +694,39 @@ describe("Engine 샘플 준비 보장", () => {
 
     expect(await started).toEqual({ status: "superseded" });
     expect(engine.isPlaying()).toBe(false);
+    vi.advanceTimersByTime(5000);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("샘플을 기다리는 동안 play -> stop -> play가 겹쳐도 나중 것만 시작한다 — 고아 타이머가 남지 않는다", async () => {
+    // 두 번째 await 뒤의 확인이 playing만 보면 이 순서를 막지 못한다. B가
+    // playing을 다시 true로 올려 두었으므로 A도 깨어나 통과하고, 둘이 각각
+    // setInterval을 건다. timerId는 나중 것만 남아 먼저 걸린 타이머는 고아가 된다.
+    const bank = new FakeSampleBank();
+    let release!: () => void;
+    bank.gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const engine = makeEngine(
+      songWithTrack("t", 60),
+      immediateProvider(new FakeAudioContext()),
+      bank,
+    );
+
+    const a = engine.play();
+    await vi.waitFor(() => expect(bank.readyCalls).toHaveLength(1));
+    engine.stop();
+    const b = engine.play();
+    // 둘 다 같은 문 앞에서 기다리게 한 뒤에 연다
+    await vi.waitFor(() => expect(bank.readyCalls).toHaveLength(2));
+
+    release();
+
+    expect(await a).toEqual({ status: "superseded" });
+    expect(await b).toEqual({ status: "playing" });
+    expect(engine.isPlaying()).toBe(true);
+
+    engine.stop();
     vi.advanceTimersByTime(5000);
     expect(vi.getTimerCount()).toBe(0);
   });
