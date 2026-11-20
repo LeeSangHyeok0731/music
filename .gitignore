@@ -51,5 +51,7 @@ _workspace_*/
 .claude/command.log
 .superpowers/
 
-# 개발용 임시 톤 팩(scripts/gen-dev-samples.mjs). 실제 샘플 팩을 넣을 때(계획 Task 15) 이 줄을 지운다.
-/public/samples/
+# 샘플 팩: 원본 캐시(scripts/build-sample-pack.mjs)와 개발용 톤(scripts/gen-dev-samples.mjs).
+# 빌드된 팩 public/samples/는 커밋한다.
+/.sample-cache/
+/public/samples-dev/

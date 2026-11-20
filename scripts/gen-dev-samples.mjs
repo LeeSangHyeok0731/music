@@ -1,13 +1,14 @@
 // 개발용 임시 톤 팩을 만든다. 직접 생성한 사인파·노이즈이며 저작권 문제가 없다.
-// 소리 파이프라인(받기 → 디코드 → 음높이 보정 → 스케줄)을 브라우저에서 끝까지
-// 돌려 보기 위한 것이지, 음색 품질을 위한 것이 아니다.
-// 실제 샘플 팩은 계획의 Task 15에서 넣고, 그때 이 스크립트의 출력은 지운다.
+// 실제 팩(public/samples/, scripts/build-sample-pack.mjs)과 별개의 파이프라인 점검용이다
+// — 받기 → 디코드 → 음높이 보정 → 스케줄을 합성 톤으로 따로 확인할 때 쓰고, 음색
+// 품질을 위한 것이 아니다. 출력은 public/samples-dev/(gitignore)라 실제 팩을 덮어쓰지
+// 않는다. 앱은 /samples를 읽으므로 이 톤으로 들으려면 뱅크의 baseUrl을 잠시 바꿔야 한다.
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-// 실행 위치와 무관하게 저장소의 public/samples에 쓴다(스크립트 위치 기준).
-const ROOT = fileURLToPath(new URL("../public/samples", import.meta.url));
+// 실행 위치와 무관하게 저장소의 public/samples-dev에 쓴다(스크립트 위치 기준).
+const ROOT = fileURLToPath(new URL("../public/samples-dev", import.meta.url));
 const RATE = 22050;
 
 /** 16비트 모노 WAV. */

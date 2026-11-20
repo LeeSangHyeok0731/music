@@ -15,7 +15,8 @@ export default defineConfig({
         test: {
           name: "node",
           environment: "node",
-          include: ["lib/**/*.test.ts"],
+          // scripts/**: 샘플 팩 빌드 스크립트의 순수 함수(라이선스 확인·DSP)
+          include: ["lib/**/*.test.ts", "scripts/**/*.test.ts"],
         },
       },
       {

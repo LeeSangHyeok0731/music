@@ -11,7 +11,8 @@
     "format": "eslint --fix",
     "check-types": "tsc --noEmit",
     "test": "vitest run",
-    "gen:dev-samples": "node scripts/gen-dev-samples.mjs"
+    "gen:dev-samples": "node scripts/gen-dev-samples.mjs",
+    "build:samples": "node scripts/build-sample-pack.mjs"
   },
   "dependencies": {
     "next": "16.2.12",
@@ -26,6 +27,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "audio-decode": "3.12.0",
     "eslint": "^9",
     "eslint-config-next": "16.2.12",
     "jsdom": "^28.1.0",
