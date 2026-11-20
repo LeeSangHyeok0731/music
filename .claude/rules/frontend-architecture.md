@@ -28,8 +28,8 @@ lib/audio/              오디오 엔진 — AudioContext, look-ahead 스케줄�
 components/verify/      소리 확인 화면 (편집 UI가 아니다)
 components/ui/          (아직 없음) 버튼, 슬라이더, 패널 등 공용 컨트롤
 state/                  (아직 없음) 편집 UI가 생길 때의 React 상태 (Context)
-scripts/                개발용 톤 생성(gen-dev-samples.mjs)
-public/samples/         (새 클론에는 없음 — gitignore) 악기 샘플. `pnpm gen:dev-samples`가 개발용 톤을 만든다. 실제 팩은 계획 Task 15
+scripts/                샘플 팩 빌드(build-sample-pack.mjs, sample-pack.config.mjs, sample-pack/), 개발용 합성 톤(gen-dev-samples.mjs → public/samples-dev/, gitignore)
+public/samples/         CC0 샘플 팩(커밋됨). `pnpm build:samples` 출력이라 손으로 고치지 않는다. 출처·라이선스는 public/samples/LICENSES.md
 ```
 
 `src/`, feature/entity 레이어, FSD는 두지 않는다. 이 규모에 맞지 않는다.

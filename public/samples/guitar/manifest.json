@@ -1,0 +1,53 @@
+{
+  "instrument": "guitar",
+  "zones": [
+    {
+      "file": "p40.wav",
+      "centerPitch": 40,
+      "loPitch": 0,
+      "hiPitch": 42
+    },
+    {
+      "file": "p45.wav",
+      "centerPitch": 45,
+      "loPitch": 43,
+      "hiPitch": 47
+    },
+    {
+      "file": "p51.wav",
+      "centerPitch": 51,
+      "loPitch": 48,
+      "hiPitch": 53
+    },
+    {
+      "file": "p57.wav",
+      "centerPitch": 57,
+      "loPitch": 54,
+      "hiPitch": 59
+    },
+    {
+      "file": "p63.wav",
+      "centerPitch": 63,
+      "loPitch": 60,
+      "hiPitch": 65
+    },
+    {
+      "file": "p69.wav",
+      "centerPitch": 69,
+      "loPitch": 66,
+      "hiPitch": 71
+    },
+    {
+      "file": "p75.wav",
+      "centerPitch": 75,
+      "loPitch": 72,
+      "hiPitch": 77
+    },
+    {
+      "file": "p81.wav",
+      "centerPitch": 81,
+      "loPitch": 78,
+      "hiPitch": 127
+    }
+  ]
+}

@@ -6,7 +6,7 @@
 
 **재구상 중이다.** 지금 있는 것은 곡 데이터 모델(`lib/score/`)과 샘플 기반 오디오 엔진(`lib/audio/`), 그리고 데모 곡을 재생해 소리를 확인하는 최소 화면(`/`)뿐이다. 이 화면은 편집 UI가 아니다.
 
-편집 UI, 곡 파일 저장·불러오기 화면, 링크 공유, 오디오 내보내기는 아직 없다. 실제 샘플 팩도 아직 커밋되지 않았다 — 지금 들을 수 있는 소리는 스크립트가 만드는 개발용 톤뿐이다. 자세한 범위는 [`AGENTS.md`](AGENTS.md)와 [설계 문서](docs/superpowers/specs/2026-11-20-core-model-sample-engine-design.md)를 본다.
+편집 UI, 곡 파일 저장·불러오기 화면, 링크 공유, 오디오 내보내기는 아직 없다. 샘플은 `public/samples/`에 커밋된 CC0 팩(피아노·일렉트릭 기타·베이스·드럼, 약 2.27MB)이다 — 출처와 라이선스는 [`public/samples/LICENSES.md`](public/samples/LICENSES.md). **아직 아무도 귀로 들어 보지 않았고 Safari 디코드도 확인하지 않았다.** 기타는 일렉트릭 기타 직결 녹음이다(CC0 어쿠스틱 기타 단음 샘플을 찾지 못했다). 자세한 범위는 [`AGENTS.md`](AGENTS.md)와 [설계 문서](docs/superpowers/specs/2026-11-20-core-model-sample-engine-design.md)를 본다.
 
 ## 기술 스택
 
@@ -20,11 +20,10 @@
 
 ```bash
 pnpm install
-pnpm gen:dev-samples   # public/samples에 개발용 톤을 만든다 (gitignore, 커밋되지 않음)
 pnpm dev
 ```
 
-http://localhost:3000 에서 확인. 개발용 톤이 없으면 샘플을 받지 못해 재생이 시작되지 않는다.
+http://localhost:3000 에서 확인. 샘플 팩은 저장소에 들어 있으므로 따로 만들 필요가 없다.
 
 ## 스크립트
 
@@ -37,7 +36,8 @@ http://localhost:3000 에서 확인. 개발용 톤이 없으면 샘플을 받지
 | `pnpm lint`            | ESLint 검사                            |
 | `pnpm format`          | ESLint 자동 수정                       |
 | `pnpm check-types`     | TypeScript 타입 검사                   |
-| `pnpm gen:dev-samples` | `public/samples/`에 개발용 톤 팩 생성  |
+| `pnpm build:samples`   | 고정 커밋의 CC0 원본을 받아(`.sample-cache/`) `public/samples/` 팩을 다시 만든다(라이선스 확인·가공·점검 포함) |
+| `pnpm gen:dev-samples` | 파이프라인 점검용 합성 톤을 `public/samples-dev/`에 생성(gitignore) |
 
 ## 구조
 
@@ -46,7 +46,8 @@ app/                    Next.js App Router 엔트리포인트 (`/` = 소리 확�
 lib/score/              곡 데이터 모델 v2 — 모델, 코드·패턴, 펼치기, 검증, 스키마, 데모 곡, 실행취소 규칙 (순수 TS)
 lib/audio/              오디오 엔진 — AudioContext, 스케줄러, 보이스 풀, 샘플 뱅크, 샘플 악기 (순수 TS)
 components/verify/      소리 확인 화면 (편집 UI가 아니다)
-scripts/                개발용 톤 생성 스크립트
+scripts/                샘플 팩 빌드(build-sample-pack.mjs + sample-pack.config.mjs + sample-pack/), 개발용 톤 생성
+public/samples/         샘플 팩(커밋됨, 스크립트 출력 — 손으로 고치지 않는다)
 docs/                   문서
 ```
 

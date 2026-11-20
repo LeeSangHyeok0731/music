@@ -1,0 +1,2 @@
+# 샘플 WAV는 바이너리다. autocrlf가 있어도 줄바꿈을 건드리지 않게 한다.
+*.wav binary

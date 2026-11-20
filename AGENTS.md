@@ -10,7 +10,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 ## 현재 상태
 
-음악 비전공자의 아이디어 스케치 도구로 **재구상 중**이다. 곡은 "코드·패턴 클립"과 "음 클립"으로 만들고, 브라우저에서 샘플 음원으로 재생한다. 하위 프로젝트 1(코어 모델 + 샘플 엔진)은 계획 Task 1~14까지 구현됐고, Task 15(실제 CC0 샘플 팩·`public/samples/LICENSES.md`·용량 예산 테스트·샘플 파일 형식과 Safari 디코드 결정)와 사람의 직접 청취가 남았다. Task 15는 **사람이 필요하다**(팩 선정·라이선스 확인·청취·Safari) — 에이전트가 혼자 시도하거나 팩 이름·라이선스를 지어내지 않는다(`docs/known-gaps.md`).
+음악 비전공자의 아이디어 스케치 도구로 **재구상 중**이다. 곡은 "코드·패턴 클립"과 "음 클립"으로 만들고, 브라우저에서 샘플 음원으로 재생한다. 하위 프로젝트 1(코어 모델 + 샘플 엔진)은 계획 Task 1~15까지 구현됐다. `public/samples/`에 CC0 샘플 팩(피아노·일렉트릭 기타·베이스·드럼, 16비트 PCM 모노 22.05kHz WAV, 약 2.27MB)이 커밋돼 있고 `pnpm build:samples`로 고정 커밋의 원본에서 다시 만든다 — 출처·라이선스는 `public/samples/LICENSES.md`, 손으로 고치지 않는다. **아직 아무도 듣지 않았고 Safari 디코드도 확인하지 않았다.** 기타는 일렉트릭 직결 녹음이다(CC0 어쿠스틱 기타를 찾지 못했다). 남은 것은 `docs/known-gaps.md`.
 
 설계는 `docs/superpowers/specs/2026-11-20-core-model-sample-engine-design.md`(이하 spec)에 있다. 같은 폴더의 그 이전 날짜 문서는 철거된 옛 설계다.
 
@@ -33,7 +33,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 - 타입이 맞는 `Song` 기준으로, `setSong`이 던지는 것은 패턴이 잘못된 곡(모르는 패턴 id, 트랙 악기와 맞지 않는 패턴)뿐이고 그때 엔진은 그대로다. 겹침·`bars`·박자표·정수 틱 같은 나머지 불변식은 검사하지 않는다. 파일·링크처럼 믿을 수 없는 입력은 반드시 `parseSong`을 거친다(모르는 `quality`·악기·패턴·버전을 거부한다) — `validateSong`은 이미 타입이 맞는 곡의 구조 불변식만 보며(`chord.quality`는 보지 않아, 타입 밖의 값은 `chordPitch`에서 오류 또는 NaN이 된다) `parseSong`의 대체가 아니다.
 - `play()`는 `PlayResult`를 돌려준다. 곡이 쓰는 악기의 샘플 준비(다운로드·디코드)가 끝나야 시작하고, 준비에 실패한 악기가 있으면 `not-ready`다. 샘플은 AudioContext 없이 `prefetch`로 받고(생성자·`setSong`이 부른다) 디코드는 컨텍스트가 생긴 `play()`에서 한다. `play()`의 await는 둘이고 `ensureRunning`이 먼저(사용자 제스처 안)이며 그다음이 `bank.ensureReady`다 — 각각 뒤에서 세션 번호를 다시 확인한다.
 
-아직 없는 것: **편집 UI(하위 프로젝트 2), 링크 공유·서명 검증·모바일 재생 뷰(3), 오디오 내보내기(4), 악보 PDF 가져오기(5)**, 곡 파일 저장·불러오기 UI(곡을 읽는 `parseSong`만 있다), 다시실행, 루프, 시크, 줌. 실제 샘플 팩도 없다 — `public/samples/`는 gitignore이고 개발용 톤을 `pnpm gen:dev-samples`로 만든다.
+아직 없는 것: **편집 UI(하위 프로젝트 2), 링크 공유·서명 검증·모바일 재생 뷰(3), 오디오 내보내기(4), 악보 PDF 가져오기(5)**, 곡 파일 저장·불러오기 UI(곡을 읽는 `parseSong`만 있다), 다시실행, 루프, 시크, 줌. (`pnpm gen:dev-samples`의 합성 톤은 파이프라인 점검용이고 `public/samples-dev/`(gitignore)에 쓴다.)
 
 ## 절대 규칙
 
