@@ -1,10 +1,5 @@
 "use client";
 
-/** A4(69) = 440Hz 기준 평균율. */
-export function midiToFreq(note: number): number {
-  return 440 * Math.pow(2, (note - 69) / 12);
-}
-
 /**
  * attack까지 peak로 올렸다가 decay 동안 떨어뜨린다.
  *

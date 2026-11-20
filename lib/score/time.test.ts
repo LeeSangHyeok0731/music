@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { PPQ } from "@/lib/score/types";
+import { PPQ } from "@/lib/score/model";
 import {
   secondsToTicks,
   songLengthTicks,
