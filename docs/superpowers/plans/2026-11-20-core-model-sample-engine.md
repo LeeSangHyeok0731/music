@@ -3836,14 +3836,6 @@ describe("SampleBank — decode와 준비", () => {
 
     expect(ctx.decoded).toHaveLength(2);
   });
-
-  it("decodeAudioData에 넘기는 바이트는 사본이다(디코드가 원본을 분리하므로)", async () => {
-    const { bank } = makeBank();
-    const ctx = new FakeAudioContext();
-    await bank.ensureReady(asAudioContext(ctx), ["piano"]);
-    // 사본이라 같은 바이트가 다시 필요할 때(재시도) 원본이 살아 있다
-    expect(ctx.decoded.every((d) => d.byteLength > 0)).toBe(true);
-  });
 });
 
 describe("SampleBank — 실패와 재시도", () => {
@@ -4155,9 +4147,10 @@ export class SampleBank implements SamplePort {
         const bytes = await fetched;
         const buffers = new Map<string, AudioBuffer>();
         for (const [file, data] of bytes) {
-          // decodeAudioData는 넘긴 ArrayBuffer를 분리(detach)한다.
-          // 사본을 넘겨야 원본이 남는다.
-          buffers.set(file, await ctx.decodeAudioData(data.slice(0)));
+          // decodeAudioData는 넘긴 ArrayBuffer를 분리(detach)한다. 받은 바이트는
+          // 이 디코드에만 쓰이고, 실패 뒤 재시도는 새 항목으로 다시 받으므로
+          // 사본을 만들 이유가 없다.
+          buffers.set(file, await ctx.decodeAudioData(data));
         }
         entry.buffers = buffers;
         this.publish(instrument, entry, "ready");
