@@ -138,7 +138,7 @@ export default defineConfig({
 - [ ] **Step 6: 통과를 확인한다**
 
 Run: `pnpm test`
-Expected: 기존 12개 파일(237 테스트) + `dom-env.test.tsx` 1개가 모두 통과한다.
+Expected: 기존 테스트가 전부 통과하고 `dom-env.test.tsx` 1개가 추가된다. (이 브랜치의 시작점 기준으로 12개 파일 186개 테스트 + 1개 파일 1개 테스트 = 13개 파일 187개 테스트. 숫자가 다르면 브랜치가 `main` 기준인지부터 확인한다 — `feat/piano-editor-page`에서는 237개다.)
 
 - [ ] **Step 7: 전체 검사 후 커밋한다**
 
@@ -3447,7 +3447,7 @@ git commit -m "refactor(audio): 스케줄러와 엔진을 v2 곡 모델 위로 �
   - `type Decoder = { decodeAudioData(data: ArrayBuffer): Promise<AudioBuffer> }`
   - `type SampleHit = { buffer: AudioBuffer; rate: number }`
   - `interface SamplePort { prefetch(instruments: readonly InstrumentId[]): void; ensureReady(ctx: Decoder, instruments: readonly InstrumentId[]): Promise<SampleReadiness>; zoneFor(instrument: InstrumentId, pitch: number): SampleHit | null }`
-  - `class SampleBank implements SamplePort` — `constructor(opts: { baseUrl: string; fetchBytes: (url: string) => Promise<ArrayBuffer> })`, `status(i)`, `getSnapshot()`, `subscribe(listener)`
+  - `class SampleBank implements SamplePort` — `constructor(opts: { baseUrl: string; fetchBytes: (url: string) => Promise<ArrayBuffer>; enabled?: boolean })`, `status(i)`, `getSnapshot()`, `subscribe(listener)`. `enabled: false`면 `prefetch`가 아무것도 받지 않는다(`ensureReady`는 그대로 받는다 — 그건 사용자 제스처 뒤 클라이언트에서만 불린다). 기본값은 `true`다.
   - `browserFetchBytes(url: string): Promise<ArrayBuffer>`, `defaultSampleBank(): SampleBank`
 
 - [ ] **Step 1: 가짜 오디오를 확장한다**
@@ -3744,6 +3744,45 @@ describe("SampleBank — 컨텍스트 없는 fetch", () => {
     expect(calls.filter((u) => u.endsWith("manifest.json"))).toHaveLength(1);
   });
 
+  it("enabled: false면 prefetch는 아무것도 받지 않고 상태도 바꾸지 않는다 (서버 렌더링)", async () => {
+    const calls: string[] = [];
+    const bank = new SampleBank({
+      baseUrl: "/samples",
+      fetchBytes: async (url) => {
+        calls.push(url);
+        return enc("x");
+      },
+      enabled: false,
+    });
+
+    bank.prefetch(["piano", "drums"]);
+    await settle();
+
+    expect(calls).toEqual([]);
+    expect(bank.status("piano")).toBe("idle");
+  });
+
+  it("enabled: false여도 ensureReady는 받는다 (클라이언트의 재생 시점)", async () => {
+    const calls: string[] = [];
+    const bank = new SampleBank({
+      baseUrl: "/samples",
+      fetchBytes: async (url) => {
+        calls.push(url);
+        const m = /^\/samples\/([a-z]+)\/(.+)$/.exec(url)!;
+        return m[2] === "manifest.json" ? enc(manifestFor(m[1])) : enc("x");
+      },
+      enabled: false,
+    });
+
+    const result = await bank.ensureReady(
+      asAudioContext(new FakeAudioContext()),
+      ["piano"],
+    );
+
+    expect(result).toEqual({ ok: true });
+    expect(calls.length).toBeGreaterThan(0);
+  });
+
   it("받기 전에는 zoneFor가 null이다", async () => {
     const { bank } = makeBank();
     expect(bank.zoneFor("piano", 60)).toBeNull();
@@ -3985,6 +4024,13 @@ export class SampleBank implements SamplePort {
     private readonly opts: {
       baseUrl: string;
       fetchBytes: (url: string) => Promise<ArrayBuffer>;
+      /**
+       * false면 prefetch가 아무것도 받지 않는다. 서버 렌더링 중에는 상대 URL
+       * fetch가 실패하고, 서버 HTML과 클라이언트 상태가 달라져 하이드레이션이
+       * 어긋날 수 있다. ensureReady는 영향받지 않는다 — 클라이언트의 사용자
+       * 제스처 뒤에서만 불린다.
+       */
+      enabled?: boolean;
     },
   ) {}
 
@@ -4004,6 +4050,7 @@ export class SampleBank implements SamplePort {
   };
 
   prefetch(instruments: readonly InstrumentId[]): void {
+    if (this.opts.enabled === false) return;
     for (const instrument of instruments) {
       // 실패는 상태(error)로 드러난다. 여기서 던지면 처리되지 않은 거부가 된다.
       this.startFetch(instrument).catch(() => {});
@@ -4131,9 +4178,16 @@ export async function browserFetchBytes(url: string): Promise<ArrayBuffer> {
   return response.arrayBuffer();
 }
 
-/** 브라우저용 기본 뱅크. 만들 때 아무것도 받지 않는다 — fetch는 prefetch가 시작한다. */
+/**
+ * 브라우저용 기본 뱅크. 만들 때 아무것도 받지 않는다 — fetch는 prefetch가 시작한다.
+ * 서버 렌더링 중(`window`가 없을 때)에는 prefetch도 하지 않는다.
+ */
 export function defaultSampleBank(): SampleBank {
-  return new SampleBank({ baseUrl: "/samples", fetchBytes: browserFetchBytes });
+  return new SampleBank({
+    baseUrl: "/samples",
+    fetchBytes: browserFetchBytes,
+    enabled: typeof window !== "undefined",
+  });
 }
 ```
 
@@ -5615,7 +5669,7 @@ In `AGENTS.md`, "## 현재 상태" 섹션의 본문(그 제목 아래부터 "설
 
 Run: `grep -n "" README.md | head -40`로 현재 내용을 읽는다. 이 저장소가 무엇인지, 실행 방법, 현재 상태를 말하는 단락을 아래 내용으로 바꾼다(실행 방법 단락이 있으면 유지하고 `pnpm gen:dev-samples` 한 줄만 추가한다):
 
-```markdown
+````markdown
 # Bandline
 
 음악 비전공자가 브라우저에서 곡 아이디어를 스케치하는 도구. 코드·패턴 블록으로 뼈대를 만들고, 필요하면 음 단위로 고친다.
@@ -5629,7 +5683,7 @@ pnpm install
 pnpm gen:dev-samples   # public/samples에 개발용 톤을 만든다 (커밋되지 않음)
 pnpm dev
 ```
-```
+````
 
 - [ ] **Step 6: `docs/known-gaps.md`를 다시 쓴다**
 
@@ -5692,7 +5746,7 @@ Replace the whole of `docs/known-gaps.md`:
 
 In `.claude/rules/frontend-architecture.md`, "## 디렉터리 구조" 섹션 안의 첫 문단("아래 구조는 실제로 존재한다. …")과 코드 블록을 아래로 교체한다. 코드 블록 바로 뒤의 "`src/`, feature/entity 레이어, FSD는 두지 않는다." 이하는 그대로 둔다.
 
-```markdown
+````markdown
 아래 구조 중 "(아직 없음)"이 아닌 것은 실제로 존재한다. 옛 타임라인·상태 계층(`components/timeline/`, `components/transport/`, `state/StudioProvider`)은 재구상에서 철거했고 편집 UI 하위 프로젝트에서 새로 만든다.
 
 ```text
@@ -5705,7 +5759,7 @@ components/ui/          (아직 없음) 버튼, 슬라이더, 패널 등 공용 
 state/                  (아직 없음) 편집 UI가 생길 때의 React 상태 (Context)
 public/samples/         악기 샘플 — 실제 팩은 계획 Task 15에서 들어온다. 지금은 개발용 톤(gitignore)
 ```
-```
+````
 
 - [ ] **Step 8: spec에 구현 중 바뀐 점을 반영한다**
 
@@ -5897,4 +5951,6 @@ git commit -m "feat(assets): CC0 샘플 팩과 출처·예산 검증을 추가�
 - Task 10은 중간에 `check-types`가 깨지는 구간을 의도적으로 허용한다(스케줄러와 엔진이 서로 물려 있다). 끝에서 한 번 통과해야 한다.
 - Task 11의 `settle()`(`setTimeout 0`)에 기대는 테스트는 `fetchBytes`가 마이크로태스크만 쓴다는 전제다.
 - Task 13의 `useSyncExternalStore(bank.subscribe, …)`는 `bank.subscribe`의 참조가 안정적이어야 한다. `SampleBank`는 클래스 필드 화살표 함수로 만들어 안정적이다. 가짜는 `makeDeps` 안에서 한 번만 만든다.
+- Task 13의 `createRealDeps`는 `useState` 초기화 중(렌더 중)에 `new Engine`을 만들고, 생성자가 `prefetch`를 부른다. 서버 렌더링·`next build` 프리렌더에서 상대 URL `fetch`가 실패하고 서버 HTML과 클라이언트 상태가 어긋날 수 있어, `defaultSampleBank()`가 `window`가 없으면 `prefetch`를 하지 않게 했다(`enabled`, Task 11). 모든 테스트가 가짜를 주입하므로 **이 경로는 자동 테스트가 직접 보지 못한다.** Task 13 Step 9의 `pnpm build`가 실패하거나 `/`가 동적 라우트로 바뀌면 이 렌더 중 부작용부터 의심한다.
+- 개발 모드 StrictMode는 `useState` 초기화를 두 번 부르므로 뱅크가 둘 생기고 prefetch가 두 번 일어난다. 브라우저 HTTP 캐시가 중복을 흡수하며 프로덕션 빌드에는 영향이 없다.
 - Task 15가 끝나기 전에는 실제 샘플이 없어 `pnpm build`·테스트는 통과해도 **앱은 개발용 톤으로만 소리가 난다.**
