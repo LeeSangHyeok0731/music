@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Engine, type AudioContextProvider } from "@/lib/audio/engine";
 import { FakeAudioContext, asAudioContext } from "@/lib/audio/testing/fake-audio";
-import { ticksPerBar } from "@/lib/score/time";
-import type { Song } from "@/lib/score/types";
+import type { Song } from "@/lib/score/model";
+import { songWithNotes } from "@/lib/score/testing/builders";
 
 const TIMER_MS = 25;
 
@@ -53,38 +53,19 @@ function immediateProvider(ctx: FakeAudioContext): AudioContextProvider {
 }
 
 /**
- * 마지막 박에 짧은 타일 하나만 있는 1마디 곡.
+ * 마지막 박에 짧은 음 하나만 있는 1마디 곡.
  *
- * 악기는 타일 길이보다 오래 울린다(피아노는 최소 0.3초). 타일이 짧을수록
+ * 악기는 음 길이보다 오래 울린다(피아노는 최소 0.3초). 음이 짧을수록
  * 곡 끝을 넘어 남는 여운이 길어져서, auto-stop이 그 여운을 기다리는지
  * 확인하기 좋다. 데모 곡으로는 여운이 5ms밖에 안 남아 판별이 안 된다.
  */
 function songWithLongTail(): Song {
-  const timeSignature: [number, number] = [4, 4];
-  const bar = ticksPerBar(timeSignature); // 1920
-
-  return {
-    tempo: 120,
-    timeSignature,
-    lengthTicks: bar,
-    lines: [
-      {
-        id: "line-piano",
-        name: "피아노",
-        kind: "pitched",
-        instrument: "piano",
-        tiles: [
-          {
-            id: "tail",
-            start: 1800, // 마디 거의 끝
-            length: 120, // 16분음표 — 엔벨로프 하한(0.3초)보다 훨씬 짧다
-            velocity: 0.7,
-            notes: [60],
-          },
-        ],
-      },
+  return songWithNotes({
+    notes: [
+      // 마디 거의 끝. 16분음표 길이 — 엔벨로프 하한(0.3초)보다 훨씬 짧다.
+      { start: 1800, length: 120, velocity: 0.7, pitch: 60 },
     ],
-  };
+  });
 }
 
 /** 오디오 시계와 타이머를 함께 굴린다. 실제 재생 한 틱에 해당한다. */
@@ -210,34 +191,13 @@ describe("Engine 시작 레이스", () => {
   });
 });
 
-/**
- * 라인 하나짜리 1마디 곡. 라인 id와 노트를 인자로 받아 setSong 전후 곡을
- * 쉽게 만든다.
- */
-function songWithLine(lineId: string, note: number): Song {
-  const timeSignature: [number, number] = [4, 4];
-  return {
-    tempo: 120,
-    timeSignature,
-    lengthTicks: ticksPerBar(timeSignature),
-    lines: [
-      {
-        id: lineId,
-        name: "피아노",
-        kind: "pitched",
-        instrument: "piano",
-        tiles: [
-          {
-            id: "tile-0",
-            start: 0, // 재생 시작 즉시(첫 onTimer) 예약되도록 곡 맨 앞
-            length: 480,
-            velocity: 0.7,
-            notes: [note],
-          },
-        ],
-      },
-    ],
-  };
+/** 트랙 하나짜리 1마디 곡. 트랙 id와 음을 인자로 받아 setSong 전후 곡을 쉽게 만든다. */
+function songWithTrack(trackId: string, pitch: number): Song {
+  return songWithNotes({
+    trackId,
+    // 재생 시작 즉시(첫 onTimer) 예약되도록 곡 맨 앞
+    notes: [{ start: 0, length: 480, velocity: 0.7, pitch }],
+  });
 }
 
 describe("Engine setSong — 악기 맵 동기화", () => {
@@ -249,19 +209,19 @@ describe("Engine setSong — 악기 맵 동기화", () => {
     vi.useRealTimers();
   });
 
-  it("불러온 곡의 라인 id가 바뀌면 새 라인도 소리가 난다", async () => {
+  it("불러온 곡의 트랙 id가 바뀌면 새 트랙도 소리가 난다", async () => {
     // 재현: 재생 한 번으로 악기 맵을 만들고(buildGraph는 최초 1회만 돈다),
-    // 정지 후 라인 id가 다른 곡을 setSong으로 갈아끼운다. 맵을 다시 채우지
-    // 않으면 sink.schedule의 `this.instruments.get(lineId)?.play(...)`가
-    // 새 id를 찾지 못해 예외도 로그도 없이 그 라인 전체가 무음이 된다.
+    // 정지 후 트랙 id가 다른 곡을 setSong으로 갈아끼운다. 맵을 다시 채우지
+    // 않으면 sink.schedule의 `this.instruments.get(trackId)?.play(...)`가
+    // 새 id를 찾지 못해 예외도 로그도 없이 그 트랙 전체가 무음이 된다.
     const ctx = new FakeAudioContext();
     const engine = new Engine(
-      songWithLine("line-old", 60),
+      songWithTrack("track-old", 60),
       immediateProvider(ctx),
     );
 
     await engine.play();
-    tick(ctx); // tick 0의 노트가 예약되며 오실레이터 3개(부분음)가 생긴다
+    tick(ctx); // tick 0의 음이 예약되며 오실레이터 3개(부분음)가 생긴다
     const oscillatorsAfterFirstPlay = ctx.created.filter(
       (n) => n.kind === "oscillator",
     ).length;
@@ -269,9 +229,7 @@ describe("Engine setSong — 악기 맵 동기화", () => {
 
     engine.stop();
 
-    // 라인 id가 "line-old" -> "line-new"로 바뀐 곡을 불러온다. 파일
-    // 불러오기가 정확히 이 모양의 곡을 들여올 수 있다.
-    engine.setSong(songWithLine("line-new", 67));
+    engine.setSong(songWithTrack("track-new", 67));
 
     await engine.play();
     tick(ctx);
@@ -280,13 +238,63 @@ describe("Engine setSong — 악기 맵 동기화", () => {
       (n) => n.kind === "oscillator",
     ).length;
 
-    // 두 번째 재생에서도 새 라인("line-new")의 노트가 실제로 악기까지
-    // 도달해 오실레이터가 새로 생겨야 한다. 맵이 갱신되지 않으면 이 수가
-    // 늘지 않는다 — instruments.get("line-new")가 undefined라 아무 일도
-    // 안 일어나기 때문이다.
+    // 두 번째 재생에서도 새 트랙의 음이 실제로 악기까지 도달해 오실레이터가
+    // 새로 생겨야 한다. 맵이 갱신되지 않으면 이 수가 늘지 않는다.
     expect(oscillatorsAfterSecondPlay).toBeGreaterThan(
       oscillatorsAfterFirstPlay,
     );
+  });
+});
+
+describe("Engine setSong — 템포와 재생 중 거부", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("정지 중 setSong은 곡의 템포를 엔진에 함께 적용하고 true를 돌려준다", () => {
+    // song.tempo가 유일한 진실이다. 호출부가 setTempo를 따로 부르는 것에
+    // 기대면 빠뜨리는 순간 화면과 재생 속도가 영구히 갈라진다.
+    const engine = new Engine(
+      songWithTrack("t", 60),
+      immediateProvider(new FakeAudioContext()),
+    );
+    expect(engine.getTempo()).toBe(120);
+
+    const applied = engine.setSong({ ...songWithTrack("t", 60), tempo: 90 });
+
+    expect(applied).toBe(true);
+    expect(engine.getTempo()).toBe(90);
+  });
+
+  it("재생 중 setSong은 거부하고 곡도 템포도 바꾸지 않는다", async () => {
+    const engine = new Engine(
+      songWithTrack("t", 60),
+      immediateProvider(new FakeAudioContext()),
+    );
+    await engine.play();
+
+    const applied = engine.setSong({ ...songWithTrack("t", 60), tempo: 90 });
+
+    expect(applied).toBe(false);
+    expect(engine.getTempo()).toBe(120);
+    engine.stop();
+  });
+
+  it("재생 중에도 setTempo는 허용된다", async () => {
+    const engine = new Engine(
+      songWithTrack("t", 60),
+      immediateProvider(new FakeAudioContext()),
+    );
+    await engine.play();
+
+    engine.setTempo(100);
+
+    expect(engine.getTempo()).toBe(100);
+    engine.stop();
   });
 });
 
@@ -300,7 +308,7 @@ describe("Engine 자동 정지", () => {
   });
 
   it("곡 끝을 지나도 마지막 음의 여운이 남아 있으면 자르지 않는다", async () => {
-    // lengthTicks만 보고 바로 stop()하면 releaseAll이 5ms 페이드로 꺼버려
+    // 곡 길이만 보고 바로 stop()하면 releaseAll이 5ms 페이드로 꺼버려
     // 마지막 비트의 꼬리가 매 재생마다 뚝 잘린다.
     const ctx = new FakeAudioContext();
     const song = songWithLongTail();
@@ -321,7 +329,7 @@ describe("Engine 자동 정지", () => {
     }
 
     expect(stoppedAt).not.toBeNull();
-    // 곡 끝(2.05초)을 지나서 멈춰야 한다. 마지막 타일은 1800틱(1.875초)에
+    // 곡 끝(2.05초)을 지나서 멈춰야 한다. 마지막 음은 1800틱(1.875초)에
     // 시작해 엔벨로프 하한 0.3초를 타므로 2.2초 언저리까지 울린다.
     expect(stoppedAt!).toBeGreaterThan(2.15);
   });

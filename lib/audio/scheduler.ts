@@ -1,4 +1,5 @@
-import { PPQ, type Song } from "@/lib/score/types";
+import type { TrackEvents } from "@/lib/score/expand";
+import { PPQ } from "@/lib/score/model";
 
 import type { AudioClock, NoteSink } from "./types";
 
@@ -23,12 +24,12 @@ export const LOOKAHEAD_SECONDS = 0.1;
  * 시각에서 역산한 값이라 정수라는 보장이 없다.
  */
 export class Scheduler {
-  private readonly song: Song;
+  private readonly tracks: readonly TrackEvents[];
   private readonly clock: AudioClock;
   private readonly sink: NoteSink;
   private readonly lookahead: number;
 
-  /** 라인별 "다음에 예약할 타일" 인덱스. 전체 스캔을 피하는 장치. */
+  /** 트랙별 "다음에 예약할 이벤트" 인덱스. 전체 스캔을 피하는 장치. */
   private cursors: number[];
 
   private anchorTick = 0;
@@ -52,19 +53,20 @@ export class Scheduler {
    *   0.1초는 25ms 타이머가 세 번 밀려도 버티는 값이다.
    */
   constructor(
-    song: Song,
+    tracks: readonly TrackEvents[],
+    tempo: number,
     clock: AudioClock,
     sink: NoteSink,
     lookaheadSeconds = LOOKAHEAD_SECONDS,
   ) {
-    this.song = song;
+    this.tracks = tracks;
     this.clock = clock;
     this.sink = sink;
     this.lookahead = lookaheadSeconds;
-    this.bpm = song.tempo;
+    this.bpm = tempo;
     // start() 전에 advance()가 불려도 undefined 커서로 조용히 no-op하지
-    // 않도록 라인 수만큼 0으로 채워 둔다.
-    this.cursors = song.lines.map(() => 0);
+    // 않도록 트랙 수만큼 0으로 채워 둔다.
+    this.cursors = tracks.map(() => 0);
   }
 
   get tempo(): number {
@@ -76,7 +78,7 @@ export class Scheduler {
     this.anchorTime = atTime;
     this.anchorTick = 0;
     this.scheduledUntilTick = 0;
-    this.cursors = this.song.lines.map(() => 0);
+    this.cursors = this.tracks.map(() => 0);
     // 새 재생은 옛 템포 구간이 없다 — 지난 재생의 앵커가 남아 있으면 안 된다.
     this.prevAnchor = null;
   }
@@ -103,29 +105,27 @@ export class Scheduler {
   }
 
   isDone(): boolean {
-    return this.song.lines.every(
-      (line, i) => this.cursors[i] >= line.tiles.length,
+    return this.tracks.every(
+      (track, i) => this.cursors[i] >= track.events.length,
     );
   }
 
-  /** 타이머가 부를 때마다 lookahead 구간 안의 타일을 예약한다. */
+  /** 타이머가 부를 때마다 lookahead 구간 안의 이벤트를 예약한다. */
   advance(): void {
     const horizonTime = this.clock.currentTime + this.lookahead;
     const horizonTick = this.timeToTick(horizonTime);
 
-    this.song.lines.forEach((line, i) => {
+    this.tracks.forEach((track, i) => {
       let cursor = this.cursors[i];
 
-      while (cursor < line.tiles.length) {
-        const tile = line.tiles[cursor];
-        // 경계에 정확히 걸친 타일은 다음 틱으로 넘긴다
-        if (tile.start >= horizonTick) break;
+      while (cursor < track.events.length) {
+        const event = track.events[cursor];
+        // 경계에 정확히 걸친 이벤트는 다음 틱으로 넘긴다
+        if (event.tick >= horizonTick) break;
 
-        const when = this.tickToTime(tile.start);
-        const dur = (tile.length / PPQ) * (60 / this.bpm);
-        for (const note of tile.notes) {
-          this.sink.schedule(line.id, note, when, dur, tile.velocity);
-        }
+        const when = this.tickToTime(event.tick);
+        const dur = (event.length / PPQ) * (60 / this.bpm);
+        this.sink.schedule(track.trackId, event.pitch, when, dur, event.velocity);
         cursor++;
       }
 

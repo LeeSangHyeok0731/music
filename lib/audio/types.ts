@@ -6,8 +6,8 @@ export interface AudioClock {
 /** 스케줄러가 예약을 내보내는 통로. 실제 실행에서는 악기 디스패처가 받는다. */
 export interface NoteSink {
   schedule(
-    lineId: string,
-    note: number,
+    trackId: string,
+    pitch: number,
     when: number,
     dur: number,
     vel: number,
@@ -16,5 +16,5 @@ export interface NoteSink {
 
 /** 하나의 악기. when은 audioContext.currentTime 기준 절대 초. */
 export interface Instrument {
-  play(note: number, when: number, dur: number, vel: number): void;
+  play(pitch: number, when: number, dur: number, vel: number): void;
 }

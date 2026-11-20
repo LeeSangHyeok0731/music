@@ -2,9 +2,9 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import { Scheduler } from "@/lib/audio/scheduler";
 import type { AudioClock, NoteSink } from "@/lib/audio/types";
-import { buildDemoSong } from "@/lib/score/fixture";
+import type { ScheduledNote, TrackEvents } from "@/lib/score/expand";
+import { DRUM_HIHAT, DRUM_KICK, PPQ } from "@/lib/score/model";
 import { ticksToSeconds } from "@/lib/score/time";
-import { DRUM_HIHAT, PPQ, type Song } from "@/lib/score/types";
 
 class FakeClock implements AudioClock {
   currentTime = 0;
@@ -14,8 +14,8 @@ class FakeClock implements AudioClock {
 }
 
 type Recorded = {
-  lineId: string;
-  note: number;
+  trackId: string;
+  pitch: number;
   when: number;
   dur: number;
   vel: number;
@@ -24,23 +24,47 @@ type Recorded = {
 class RecordingSink implements NoteSink {
   readonly events: Recorded[] = [];
   schedule(
-    lineId: string,
-    note: number,
+    trackId: string,
+    pitch: number,
     when: number,
     dur: number,
     vel: number,
   ): void {
-    this.events.push({ lineId, note, when, dur, vel });
+    this.events.push({ trackId, pitch, when, dur, vel });
   }
 }
 
-/** 타일 하나에 음이 여러 개면 예약도 그만큼 나온다. */
-function totalNoteCount(song: Song): number {
-  return song.lines.reduce(
-    (sum, line) =>
-      sum + line.tiles.reduce((s, tile) => s + tile.notes.length, 0),
-    0,
-  );
+const TEMPO = 120;
+const BARS = 16;
+
+/**
+ * 16마디(120BPM에서 32초) 곡의 이벤트.
+ * 피아노: 마디마다 3화음(60·64·67), 길이 한 마디.
+ * 드럼: 8분음표(240틱)마다 하이햇, 마디 첫 박에 킥.
+ * 스케줄러는 곡의 내용을 모른다 — 이벤트가 시간순이라는 것만 믿는다.
+ */
+function demoEvents(): TrackEvents[] {
+  const piano: ScheduledNote[] = [];
+  for (let bar = 0; bar < BARS; bar++) {
+    for (const pitch of [60, 64, 67]) {
+      piano.push({ tick: bar * 1920, length: 1920, pitch, velocity: 0.7 });
+    }
+  }
+  const drums: ScheduledNote[] = [];
+  for (let i = 0; i < BARS * 8; i++) {
+    drums.push({ tick: i * 240, length: 120, pitch: DRUM_HIHAT, velocity: 0.5 });
+    if (i % 8 === 0) {
+      drums.push({ tick: i * 240, length: 240, pitch: DRUM_KICK, velocity: 0.9 });
+    }
+  }
+  return [
+    { trackId: "track-piano", instrument: "piano", events: piano },
+    { trackId: "track-drums", instrument: "drums", events: drums },
+  ];
+}
+
+function totalCount(tracks: TrackEvents[]): number {
+  return tracks.reduce((sum, t) => sum + t.events.length, 0);
 }
 
 /** 25ms 타이머를 흉내내 seconds만큼 굴린다. */
@@ -54,44 +78,51 @@ function run(scheduler: Scheduler, clock: FakeClock, seconds: number): void {
 }
 
 describe("Scheduler", () => {
-  let song: Song;
+  let tracks: TrackEvents[];
   let clock: FakeClock;
   let sink: RecordingSink;
   let scheduler: Scheduler;
 
   beforeEach(() => {
-    song = buildDemoSong();
+    tracks = demoEvents();
     clock = new FakeClock();
     sink = new RecordingSink();
-    scheduler = new Scheduler(song, clock, sink);
+    scheduler = new Scheduler(tracks, TEMPO, clock, sink);
     scheduler.start(0);
   });
 
   it("곡을 끝까지 굴리면 모든 음이 정확히 한 번씩 예약된다", () => {
     run(scheduler, clock, 33);
-    expect(sink.events).toHaveLength(totalNoteCount(song));
+    expect(sink.events).toHaveLength(totalCount(tracks));
     expect(scheduler.isDone()).toBe(true);
   });
 
   it("예약 시각이 음악적 시간과 일치한다", () => {
     run(scheduler, clock, 5);
-    const piano = sink.events.filter((e) => e.lineId === "line-piano");
+    const piano = sink.events.filter((e) => e.trackId === "track-piano");
     // 피아노는 마디마다 3화음 하나 — 첫 마디는 0초, 둘째 마디는 2초
     expect(piano[0].when).toBeCloseTo(0, 9);
-    expect(piano[3].when).toBeCloseTo(ticksToSeconds(1920, 120), 9);
+    expect(piano[3].when).toBeCloseTo(ticksToSeconds(1920, TEMPO), 9);
     expect(piano[3].when).toBeCloseTo(2, 9);
   });
 
-  it("예약 길이가 타일 길이와 일치한다", () => {
+  it("예약 길이가 이벤트 길이와 일치한다", () => {
     run(scheduler, clock, 3);
-    const piano = sink.events.find((e) => e.lineId === "line-piano")!;
-    // 피아노 타일은 한 마디(1920틱) = 120BPM에서 2초
+    const piano = sink.events.find((e) => e.trackId === "track-piano")!;
+    // 한 마디(1920틱) = 120BPM에서 2초
     expect(piano.dur).toBeCloseTo(2, 9);
   });
 
-  it("같은 타일을 두 번 예약하지 않는다", () => {
+  it("pitch와 velocity를 그대로 넘긴다", () => {
+    run(scheduler, clock, 0.05);
+    const first = sink.events.find((e) => e.trackId === "track-piano")!;
+    expect(first.pitch).toBe(60);
+    expect(first.vel).toBe(0.7);
+  });
+
+  it("같은 이벤트를 두 번 예약하지 않는다", () => {
     run(scheduler, clock, 33);
-    const keys = sink.events.map((e) => `${e.lineId}:${e.note}:${e.when}`);
+    const keys = sink.events.map((e) => `${e.trackId}:${e.pitch}:${e.when}`);
     expect(new Set(keys).size).toBe(keys.length);
   });
 
@@ -111,16 +142,15 @@ describe("Scheduler", () => {
     }
   });
 
-  it("horizon 경계에 정확히 걸친 타일은 다음 틱으로 넘어간다", () => {
-    const boundaryClock = new FakeClock();
+  it("horizon 경계에 정확히 걸친 이벤트는 다음 틱으로 넘어간다", () => {
     const boundarySink = new RecordingSink();
-    // 피아노 두 번째 타일은 1920틱(120BPM에서 2.0초)이므로
+    // 피아노 둘째 마디는 1920틱(120BPM에서 2.0초)이므로
     // lookahead를 2초로 잡아 그 경계에 정확히 걸리게 한다
-    const s = new Scheduler(song, boundaryClock, boundarySink, 2);
+    const s = new Scheduler(demoEvents(), TEMPO, new FakeClock(), boundarySink, 2);
     s.start(0);
     s.advance();
     const pianoWhens = boundarySink.events
-      .filter((e) => e.lineId === "line-piano")
+      .filter((e) => e.trackId === "track-piano")
       .map((e) => e.when);
     // 0초짜리는 들어오고, 정확히 2.0초짜리는 아직 안 들어온다
     expect(pianoWhens).toContain(0);
@@ -138,20 +168,35 @@ describe("Scheduler", () => {
     const c = new FakeClock();
     const s2 = new RecordingSink();
     c.currentTime = 10;
-    const sch = new Scheduler(song, c, s2);
+    const sch = new Scheduler(demoEvents(), TEMPO, c, s2);
     sch.start(10.5);
     sch.advance();
     expect(s2.events.every((e) => e.when >= 10.5)).toBe(true);
   });
+
+  it("이벤트가 없는 트랙만 있어도 바로 끝난 상태다", () => {
+    const empty = new Scheduler(
+      [{ trackId: "t", instrument: "piano", events: [] }],
+      TEMPO,
+      new FakeClock(),
+      new RecordingSink(),
+    );
+    empty.start(0);
+    expect(empty.isDone()).toBe(true);
+  });
 });
 
 describe("Scheduler.setTempo", () => {
-  it("템포를 바꿔도 이미 예약된 구간과 새 구간 사이에 틈이나 겹침이 없다", () => {
-    const song = buildDemoSong();
+  function setup() {
     const clock = new FakeClock();
     const sink = new RecordingSink();
-    const scheduler = new Scheduler(song, clock, sink);
+    const scheduler = new Scheduler(demoEvents(), TEMPO, clock, sink);
     scheduler.start(0);
+    return { clock, sink, scheduler };
+  }
+
+  it("템포를 바꿔도 이미 예약된 구간과 새 구간 사이에 틈이나 겹침이 없다", () => {
+    const { clock, sink, scheduler } = setup();
 
     // 4초까지 120BPM으로 굴린다
     run(scheduler, clock, 4);
@@ -175,28 +220,22 @@ describe("Scheduler.setTempo", () => {
     // 4.1 + (4080 - 3936) / 480 * (60 / 240) = 4.175.
     // 틀린 앵커(3840@4.0)로 계산하면 간격이 0.125가 되어 이 값과 어긋난다.
     const hihatWhens = sink.events
-      .filter((e) => e.lineId === "line-drums" && e.note === DRUM_HIHAT)
+      .filter((e) => e.trackId === "track-drums" && e.pitch === DRUM_HIHAT)
       .map((e) => e.when);
     const beforeBoundary = hihatWhens.find((w) => Math.abs(w - 4.0) < 1e-9);
-    const afterBoundary = hihatWhens.find(
-      (w) => Math.abs(w - 4.175) < 1e-9,
-    );
+    const afterBoundary = hihatWhens.find((w) => Math.abs(w - 4.175) < 1e-9);
     expect(beforeBoundary).toBeDefined();
     expect(afterBoundary).toBeDefined();
     expect(afterBoundary! - beforeBoundary!).toBeCloseTo(0.175, 9);
   });
 
   it("템포를 바꾸면 이후 간격이 새 템포를 따른다", () => {
-    const song = buildDemoSong();
-    const clock = new FakeClock();
-    const sink = new RecordingSink();
-    const scheduler = new Scheduler(song, clock, sink);
-    scheduler.start(0);
+    const { clock, sink, scheduler } = setup();
     scheduler.setTempo(240);
     run(scheduler, clock, 5);
 
     const piano = sink.events
-      .filter((e) => e.lineId === "line-piano")
+      .filter((e) => e.trackId === "track-piano")
       .map((e) => e.when);
     // 240BPM에서 한 마디(1920틱)는 1초
     const uniqueStarts = [...new Set(piano)].sort((a, b) => a - b);
@@ -204,19 +243,14 @@ describe("Scheduler.setTempo", () => {
   });
 
   it("tempo 프로퍼티가 현재 값을 돌려준다", () => {
-    const song = buildDemoSong();
-    const scheduler = new Scheduler(song, new FakeClock(), new RecordingSink());
-    expect(scheduler.tempo).toBe(song.tempo);
+    const { scheduler } = setup();
+    expect(scheduler.tempo).toBe(TEMPO);
     scheduler.setTempo(90);
     expect(scheduler.tempo).toBe(90);
   });
 
   it("템포를 바꿔도 currentTick이 뒤로 가지 않고, lookahead 구간 안에서는 옛 템포를 따른다", () => {
-    const song = buildDemoSong();
-    const clock = new FakeClock();
-    const sink = new RecordingSink();
-    const scheduler = new Scheduler(song, clock, sink);
-    scheduler.start(0);
+    const { clock, scheduler } = setup();
 
     // 4초까지 120BPM으로 굴린다. scheduledUntilTick은 timeToTick(4.1) = 3936.
     run(scheduler, clock, 4);
@@ -248,11 +282,7 @@ describe("Scheduler.setTempo", () => {
     // 슬라이더 드래그는 pointermove마다 setTempo를 부른다. 두 번째 호출이
     // 아직 살아 있는 prevAnchor를 덮어쓰면, 지금 울리고 있는 구간을 중간
     // 템포로 역산해 재생 위치가 다시 뒤로 튄다.
-    const song = buildDemoSong();
-    const clock = new FakeClock();
-    const sink = new RecordingSink();
-    const scheduler = new Scheduler(song, clock, sink);
-    scheduler.start(0);
+    const { clock, scheduler } = setup();
 
     run(scheduler, clock, 4);
     const before = scheduler.currentTick();
@@ -274,10 +304,9 @@ describe("Scheduler.setTempo", () => {
 
 describe("Scheduler 커서", () => {
   it("커서는 뒤로 가지 않는다", () => {
-    const song = buildDemoSong();
     const clock = new FakeClock();
     const sink = new RecordingSink();
-    const scheduler = new Scheduler(song, clock, sink);
+    const scheduler = new Scheduler(demoEvents(), TEMPO, clock, sink);
     scheduler.start(0);
 
     let previous = 0;
@@ -290,10 +319,9 @@ describe("Scheduler 커서", () => {
   });
 
   it("PPQ 기준 dur 계산이 음수가 되지 않는다", () => {
-    const song = buildDemoSong();
     const clock = new FakeClock();
     const sink = new RecordingSink();
-    const scheduler = new Scheduler(song, clock, sink);
+    const scheduler = new Scheduler(demoEvents(), TEMPO, clock, sink);
     scheduler.start(0);
     run(scheduler, clock, 33);
     for (const event of sink.events) {

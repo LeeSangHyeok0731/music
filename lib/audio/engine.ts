@@ -1,7 +1,8 @@
 "use client";
 
-import { ticksPerBar, ticksPerBeat } from "@/lib/score/time";
-import type { Song } from "@/lib/score/types";
+import { expandSong, type TrackEvents } from "@/lib/score/expand";
+import type { Song } from "@/lib/score/model";
+import { songLengthTicks, ticksPerBar, ticksPerBeat } from "@/lib/score/time";
 
 import { ensureRunning, getAudioContext } from "./context";
 import { createInstrument } from "./instruments";
@@ -37,6 +38,8 @@ const browserContextProvider: AudioContextProvider = {
  */
 export class Engine {
   private song: Song;
+  /** `expandSong`으로 편 이벤트. 재생과 내보내기가 같은 함수를 쓴다. */
+  private events: TrackEvents[];
 
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
@@ -70,12 +73,17 @@ export class Engine {
     contextProvider: AudioContextProvider = browserContextProvider,
   ) {
     this.song = song;
+    this.events = expandSong(song);
     this.bpm = song.tempo;
     this.contextProvider = contextProvider;
   }
 
   isPlaying(): boolean {
     return this.playing;
+  }
+
+  getTempo(): number {
+    return this.bpm;
   }
 
   currentTick(): number {
@@ -111,14 +119,13 @@ export class Engine {
       this.buildGraph(ctx);
 
       const sink: NoteSink = {
-        schedule: (lineId, note, when, dur, vel) => {
-          this.instruments.get(lineId)?.play(note, when, dur, vel);
+        schedule: (trackId, pitch, when, dur, vel) => {
+          this.instruments.get(trackId)?.play(pitch, when, dur, vel);
         },
       };
 
       const startTime = ctx.currentTime + START_DELAY;
-      this.scheduler = new Scheduler(this.song, ctx, sink);
-      this.scheduler.setTempo(this.bpm);
+      this.scheduler = new Scheduler(this.events, this.bpm, ctx, sink);
       this.scheduler.start(startTime);
       this.nextClickTick = 0;
 
@@ -172,36 +179,39 @@ export class Engine {
 
   /**
    * 곡을 갈아끼운다. 편집은 정지 중에만 일어나므로 다음 play()부터 반영된다.
-   * 재생 중에 부르면 이미 예약된 구간과 새 곡이 어긋나므로 무시한다.
+   *
+   * 재생 중에는 거부하고 false를 돌려준다. 트랙별 커서가 이벤트 인덱스라,
+   * 재생 중 이벤트가 바뀌면 노트가 조용히 누락되기 때문이다.
+   *
+   * 곡·이벤트·템포·악기 맵을 **한 번에** 맞춘다. `song.tempo`가 템포의
+   * 유일한 진실이므로 호출부가 setTempo를 따로 부를 필요가 없다 — 옛
+   * 설계에서는 그 책임이 호출부에 있어서, 빠뜨리면 화면과 재생 속도가
+   * 영구히 갈라졌다. 재생 중 템포 변경은 setTempo가 맡는다.
+   *
+   * 트랙 구성(id·instrument 순서)이 바뀌면 악기 맵을 다시 채운다. 파일을
+   * 불러오면 트랙 id나 악기가 다른 곡이 통째로 들어올 수 있고, 맵을 그대로
+   * 두면 sink.schedule의 `this.instruments.get(trackId)`가 못 찾은 트랙을
+   * 조용히 무시하거나(무음) 옛 악기로 재생한다. ctx/pool이 아직 없으면(한 번도
+   * play()하지 않았거나 dispose된 뒤라면) 다시 채울 그래프 자체가 없다 —
+   * 다음 buildGraph()가 새 곡의 트랙으로 정확히 채운다.
    */
-  setSong(song: Song): void {
-    if (this.playing) return;
+  setSong(song: Song): boolean {
+    if (this.playing) return false;
 
-    // 라인 구성(id·instrument 쌍의 순서)이 바뀌면 악기 맵을 다시 채운다.
-    // 파일 불러오기는 라인 id나 instrument가 다른 곡을 통째로 들여올 수
-    // 있어서, 맵을 그대로 두면 sink.schedule의 `this.instruments.get(lineId)`가
-    // 못 찾은 라인을 조용히 무시하거나(무음) 옛 악기로 재생한다.
-    // ctx/pool이 아직 없으면(한 번도 play()하지 않았거나 dispose된 뒤라면)
-    // 다시 채울 그래프 자체가 없다 — 다음 buildGraph()가 새 song.lines로
-    // 정확히 채우므로 여기서는 아무 것도 하지 않는다.
-    if (this.ctx && this.pool && !sameLineComposition(this.song, song)) {
+    if (this.ctx && this.pool && !sameTrackComposition(this.song, song)) {
       this.instruments.clear();
-      for (const line of song.lines) {
+      for (const track of song.tracks) {
         this.instruments.set(
-          line.id,
-          createInstrument(line.instrument, this.ctx, this.pool),
+          track.id,
+          createInstrument(track.instrument, this.ctx, this.pool),
         );
       }
     }
 
     this.song = song;
-    // bpm은 건드리지 않는다. 템포 통합 이후 song.tempo와 엔진의 bpm은
-    // 이름만 다른 같은 값이다 — 곡을 갈아끼우는 호출부가 이 둘을 맞추는
-    // 책임을 진다: StudioProvider의 setTempo·loadSong·undo가 setSong과
-    // 같은 호출에서 getEngine().setTempo(song.tempo)를 명시적으로 부른다.
-    // 여기서 song.tempo를 bpm에 대입하면 책임이 두 곳(호출부 + 여기)에
-    // 생겨 어느 한쪽이 먼저/나중에 불려도 안전해야 하는 부담이 생긴다 —
-    // 그건 이 코멘트 하나를 고치는 범위를 넘는 동작 변경이라 하지 않는다.
+    this.events = expandSong(song);
+    this.bpm = song.tempo;
+    return true;
   }
 
   dispose(): void {
@@ -225,15 +235,18 @@ export class Engine {
     const pool = new VoicePool(ctx, master);
 
     // early return(this.master) 때문에 이 맵은 최초 play() 시점에만 이
-    // 루프로 채워진다. 그 뒤로 라인 구성이 바뀌는 유일한 경로는 setSong()
-    // 뿐이고, setSong()이 sameLineComposition()으로 변화를 감지해 맵을
+    // 루프로 채워진다. 그 뒤로 트랙 구성이 바뀌는 유일한 경로는 setSong()
+    // 뿐이고, setSong()이 sameTrackComposition()으로 변화를 감지해 맵을
     // 직접 다시 채운다(위 참고) — 그래서 여기서는 그냥 최초 채우기만 하면
     // 된다. 이 동기화가 깨지면 sink.schedule의
-    // `this.instruments.get(lineId)?.play(...)`가 못 찾은 라인을 조용히
+    // `this.instruments.get(trackId)?.play(...)`가 못 찾은 트랙을 조용히
     // 무시해버린다 — 예외도 로그도 없이 노트만 안 울리는, 가장 찾기 어려운
     // 종류의 오디오 버그다.
-    for (const line of this.song.lines) {
-      this.instruments.set(line.id, createInstrument(line.instrument, ctx, pool));
+    for (const track of this.song.tracks) {
+      this.instruments.set(
+        track.id,
+        createInstrument(track.instrument, ctx, pool),
+      );
     }
 
     this.master = master;
@@ -253,10 +266,10 @@ export class Engine {
 
     // 곡 끝을 지나도 마지막 노트의 릴리즈 테일이 아직 울리는 중이면
     // 자르지 않는다. 피아노 최소 0.3초, 킥 고정 0.35초처럼 악기들은
-    // 의도적으로 tile 길이보다 오래 울리도록 되어 있어서, lengthTicks만
+    // 의도적으로 음 길이보다 오래 울리도록 되어 있어서, 곡 길이만
     // 보고 바로 stop() -> releaseAll(5ms 페이드)하면 마지막 비트의 꼬리가
     // 매번 뚝 잘린다. 풀에 아직 소리 나는 보이스가 없을 때까지 기다린다.
-    const pastEnd = scheduler.currentTick() > this.song.lengthTicks;
+    const pastEnd = scheduler.currentTick() > songLengthTicks(this.song);
     const stillSounding = this.pool
       ? this.pool.latestEndsAt() > this.ctx.currentTime
       : false;
@@ -275,7 +288,7 @@ export class Engine {
     // 스케줄러의 note lookahead와 같은 값이어야 한다 — LOOKAHEAD_SECONDS 주석 참고.
     const horizon = this.ctx.currentTime + LOOKAHEAD_SECONDS;
 
-    while (this.nextClickTick <= this.song.lengthTicks) {
+    while (this.nextClickTick <= songLengthTicks(this.song)) {
       const when = scheduler.tickToTime(this.nextClickTick);
       if (when >= horizon) break;
       if (when >= this.ctx.currentTime) {
@@ -287,17 +300,17 @@ export class Engine {
 }
 
 /**
- * 두 곡의 라인 구성(순서·id·instrument)이 같은지 본다.
+ * 두 곡의 트랙 구성(순서·id·instrument)이 같은지 본다.
  *
- * 타일 내용(노트, 세기, 길이 등)은 보지 않는다 — 그건 스케줄러가 매번
- * this.song에서 새로 읽으므로 악기 맵과 무관하다. 여기서 보는 것은 오직
- * "sink.schedule이 lineId로 인스트루먼트를 찾을 수 있는가"에 영향을 주는
- * 두 가지, id와 instrument뿐이다.
+ * 클립 내용(음, 세기, 길이 등)은 보지 않는다 — 그건 expandSong이 매번
+ * 새로 펴므로 악기 맵과 무관하다. 여기서 보는 것은 오직 "sink.schedule이
+ * trackId로 인스트루먼트를 찾을 수 있는가"에 영향을 주는 두 가지, id와
+ * instrument뿐이다.
  */
-function sameLineComposition(a: Song, b: Song): boolean {
-  if (a.lines.length !== b.lines.length) return false;
-  return a.lines.every(
-    (line, i) =>
-      line.id === b.lines[i].id && line.instrument === b.lines[i].instrument,
+function sameTrackComposition(a: Song, b: Song): boolean {
+  if (a.tracks.length !== b.tracks.length) return false;
+  return a.tracks.every(
+    (track, i) =>
+      track.id === b.tracks[i].id && track.instrument === b.tracks[i].instrument,
   );
 }
