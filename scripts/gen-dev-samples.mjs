@@ -4,8 +4,10 @@
 // 실제 샘플 팩은 계획의 Task 15에서 넣고, 그때 이 스크립트의 출력은 지운다.
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
-const ROOT = path.join(process.cwd(), "public", "samples");
+// 실행 위치와 무관하게 저장소의 public/samples에 쓴다(스크립트 위치 기준).
+const ROOT = fileURLToPath(new URL("../public/samples", import.meta.url));
 const RATE = 22050;
 
 /** 16비트 모노 WAV. */

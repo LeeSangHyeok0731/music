@@ -17,7 +17,7 @@ import {
   type InstrumentId,
   type Song,
 } from "@/lib/score/model";
-import { ticksToBarBeat } from "@/lib/score/time";
+import { songLengthTicks, ticksToBarBeat } from "@/lib/score/time";
 
 /** 화면이 엔진에서 쓰는 부분. 테스트가 가짜를 끼운다. */
 export type VerifyEngine = {
@@ -134,15 +134,18 @@ export function VerifyScreen({
 
   useEffect(() => {
     if (!playing) return;
+    // 곡 끝 뒤 릴리즈 꼬리 동안 엔진 틱은 곡 길이를 넘는다. 마지막 틱에서 멈춘다.
+    const lastTick = songLengthTicks(song) - 1;
     const id = window.setInterval(() => {
-      const next = ticksToBarBeat(engine.currentTick(), song.timeSignature);
+      const tick = Math.min(engine.currentTick(), lastTick);
+      const next = ticksToBarBeat(tick, song.timeSignature);
       // 같으면 이전 객체를 유지해 불필요한 리렌더를 막는다.
       setPosition((prev) =>
         prev.bar === next.bar && prev.beat === next.beat ? prev : next,
       );
     }, POSITION_SAMPLE_MS);
     return () => window.clearInterval(id);
-  }, [playing, engine, song.timeSignature]);
+  }, [playing, engine, song]);
 
   async function handlePlay() {
     setMessage(null);
