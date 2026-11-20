@@ -127,6 +127,7 @@ class FakeOscillatorNode extends FakeScheduledSource {
 
 class FakeBufferSourceNode extends FakeScheduledSource {
   buffer: unknown = null;
+  readonly playbackRate = new FakeAudioParam();
 
   constructor() {
     super("bufferSource");
@@ -211,6 +212,22 @@ export class FakeAudioContext {
   createBuffer(channels: number, length: number): { getChannelData(): Float32Array } {
     const data = new Float32Array(length * channels);
     return { getChannelData: () => data };
+  }
+
+  /** decodeAudioData에 들어온 바이트. 몇 번, 무엇을 디코드했는지 검사한다. */
+  readonly decoded: ArrayBuffer[] = [];
+  /** true면 decodeAudioData가 실패한다. */
+  failDecode = false;
+
+  async decodeAudioData(data: ArrayBuffer): Promise<AudioBuffer> {
+    this.decoded.push(data);
+    if (this.failDecode) throw new Error("decode 실패");
+    return {
+      duration: 1,
+      length: 48000,
+      sampleRate: 48000,
+      numberOfChannels: 1,
+    } as unknown as AudioBuffer;
   }
 
   async resume(): Promise<void> {
