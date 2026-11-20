@@ -10,7 +10,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 ## 현재 상태
 
-음악 비전공자의 아이디어 스케치 도구로 **재구상 중**이다. 곡은 "코드·패턴 클립"과 "음 클립"으로 만들고, 브라우저에서 샘플 음원으로 재생한다. 하위 프로젝트 1(코어 모델 + 샘플 엔진)은 계획 Task 1~15까지 구현됐다. `public/samples/`에 CC0 샘플 팩(피아노·일렉트릭 기타·베이스·드럼, 16비트 PCM 모노 22.05kHz WAV, 약 2.2MB)이 커밋돼 있고 `pnpm build:samples`로 고정 커밋의 원본에서 다시 만든다 — 출처·라이선스는 `public/samples/LICENSES.md`, 손으로 고치지 않는다. **아직 아무도 듣지 않았고 Safari 디코드도 확인하지 않았다.** 기타는 일렉트릭 직결 녹음이다(CC0 어쿠스틱 기타를 찾지 못했다). 남은 것은 `docs/known-gaps.md`.
+음악 비전공자의 아이디어 스케치 도구로 **재구상 중**이다. 곡은 "코드·패턴 클립"과 "음 클립"으로 만들고, 브라우저에서 샘플 음원으로 재생한다. 하위 프로젝트 1(코어 모델 + 샘플 엔진)은 계획 Task 1~15까지 구현됐다. `public/samples/`에 CC0 샘플 팩(피아노·일렉트릭 기타·베이스·드럼, 16비트 PCM 모노 22.05kHz WAV, 약 2.27MB)이 커밋돼 있고 `pnpm build:samples`로 고정 커밋의 원본에서 다시 만든다 — 출처·라이선스는 `public/samples/LICENSES.md`, 손으로 고치지 않는다. **아직 아무도 듣지 않았고 Safari 디코드도 확인하지 않았다.** 기타는 일렉트릭 직결 녹음이다(CC0 어쿠스틱 기타를 찾지 못했다). 남은 것은 `docs/known-gaps.md`.
 
 설계는 `docs/superpowers/specs/2026-11-20-core-model-sample-engine-design.md`(이하 spec)에 있다. 같은 폴더의 그 이전 날짜 문서는 철거된 옛 설계다.
 

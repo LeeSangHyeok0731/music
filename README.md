@@ -6,7 +6,7 @@
 
 **재구상 중이다.** 지금 있는 것은 곡 데이터 모델(`lib/score/`)과 샘플 기반 오디오 엔진(`lib/audio/`), 그리고 데모 곡을 재생해 소리를 확인하는 최소 화면(`/`)뿐이다. 이 화면은 편집 UI가 아니다.
 
-편집 UI, 곡 파일 저장·불러오기 화면, 링크 공유, 오디오 내보내기는 아직 없다. 샘플은 `public/samples/`에 커밋된 CC0 팩(피아노·일렉트릭 기타·베이스·드럼, 약 2.2MB)이다 — 출처와 라이선스는 [`public/samples/LICENSES.md`](public/samples/LICENSES.md). **아직 아무도 귀로 들어 보지 않았고 Safari 디코드도 확인하지 않았다.** 기타는 일렉트릭 기타 직결 녹음이다(CC0 어쿠스틱 기타 단음 샘플을 찾지 못했다). 자세한 범위는 [`AGENTS.md`](AGENTS.md)와 [설계 문서](docs/superpowers/specs/2026-11-20-core-model-sample-engine-design.md)를 본다.
+편집 UI, 곡 파일 저장·불러오기 화면, 링크 공유, 오디오 내보내기는 아직 없다. 샘플은 `public/samples/`에 커밋된 CC0 팩(피아노·일렉트릭 기타·베이스·드럼, 약 2.27MB)이다 — 출처와 라이선스는 [`public/samples/LICENSES.md`](public/samples/LICENSES.md). **아직 아무도 귀로 들어 보지 않았고 Safari 디코드도 확인하지 않았다.** 기타는 일렉트릭 기타 직결 녹음이다(CC0 어쿠스틱 기타 단음 샘플을 찾지 못했다). 자세한 범위는 [`AGENTS.md`](AGENTS.md)와 [설계 문서](docs/superpowers/specs/2026-11-20-core-model-sample-engine-design.md)를 본다.
 
 ## 기술 스택
 
