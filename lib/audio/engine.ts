@@ -1,12 +1,13 @@
 "use client";
 
-import { expandSong, type TrackEvents } from "@/lib/score/expand";
-import type { Song } from "@/lib/score/model";
+import { expandSong, instrumentsOf, type TrackEvents } from "@/lib/score/expand";
+import type { InstrumentId, Song } from "@/lib/score/model";
 import { songLengthTicks, ticksPerBar, ticksPerBeat } from "@/lib/score/time";
 
 import { ensureRunning, getAudioContext } from "./context";
 import { createInstrument } from "./instruments";
 import { createMetronome, type Metronome } from "./metronome";
+import { defaultSampleBank, type SamplePort } from "./samples/bank";
 import { LOOKAHEAD_SECONDS, Scheduler } from "./scheduler";
 import type { Instrument, NoteSink } from "./types";
 import { VoicePool } from "./voices";
@@ -31,6 +32,20 @@ const browserContextProvider: AudioContextProvider = {
   get: getAudioContext,
   ensureRunning,
 };
+
+/**
+ * `play()`의 결과. "눌렀는데 아무 일도 안 일어남"을 값으로 구분한다.
+ *
+ * - `playing`: 소리를 시작했다
+ * - `already-playing`: 이미 재생 중이라 아무것도 하지 않았다
+ * - `superseded`: 기다리는 동안 stop()이나 더 나중의 play()가 주도권을 가져갔다
+ * - `not-ready`: 곡이 쓰는 악기 중 샘플이 준비되지 않은 것이 있어 시작하지 않았다
+ */
+export type PlayResult =
+  | { status: "playing" }
+  | { status: "already-playing" }
+  | { status: "superseded" }
+  | { status: "not-ready"; failed: InstrumentId[] };
 
 /**
  * 노드 그래프와 재생 상태를 소유한다. React를 import하지 않는다.
@@ -67,15 +82,21 @@ export class Engine {
   onStop: (() => void) | null = null;
 
   private readonly contextProvider: AudioContextProvider;
+  private readonly bank: SamplePort;
 
   constructor(
     song: Song,
     contextProvider: AudioContextProvider = browserContextProvider,
+    bank: SamplePort = defaultSampleBank(),
   ) {
     this.song = song;
     this.events = expandSong(song);
     this.bpm = song.tempo;
     this.contextProvider = contextProvider;
+    this.bank = bank;
+    // AudioContext 없이 파일만 받는다. 곡을 여는 시점은 사용자 제스처 밖일 수
+    // 있으므로 디코드는 play()에서 컨텍스트가 생긴 뒤에 한다.
+    this.bank.prefetch(instrumentsOf(song));
   }
 
   isPlaying(): boolean {
@@ -91,9 +112,14 @@ export class Engine {
     return Math.max(0, this.scheduler.currentTick());
   }
 
-  /** 반드시 사용자 제스처 핸들러 안에서 await할 것. */
-  async play(): Promise<void> {
-    if (this.playing) return;
+  /**
+   * 반드시 사용자 제스처 핸들러 안에서 await할 것.
+   *
+   * 결과를 값으로 돌려준다(`PlayResult`). 샘플이 준비되지 않으면 소리를 시작하지
+   * 않는다 — 준비 안 된 악기가 조용히 무음이 되는 경로를 만들지 않는다.
+   */
+  async play(): Promise<PlayResult> {
+    if (this.playing) return { status: "already-playing" };
 
     // 콜드 스타트에서 ensureRunning()은 수십 ms 걸리는 진짜 await이다.
     // 그 창 안에서 play/stop이 어떤 순서로 겹쳐도 살아남을 세션 번호를
@@ -106,16 +132,29 @@ export class Engine {
 
     try {
       const ctx = this.contextProvider.get();
-      await this.contextProvider.ensureRunning();
 
-      // 내가 시작한 세션이 아직 최신인가. 아니라면 그 사이 stop()이 눌렸거나
-      // 더 나중의 play()가 주도권을 가져간 것이므로 여기서 끝낸다. 아직
-      // 타이머도 그래프도 안 만들었으니 되돌릴 것은 없다. stop()이 이미
-      // playing을 false로 되돌려 놓았으니 여기서 다시 만질 필요는 없다.
-      if (!this.playing || this.session !== session) return;
+      // 사용자 제스처 안의 **첫** await. 샘플 대기는 반드시 이 뒤에 온다 —
+      // 순서가 바뀌면 느린 네트워크에서 제스처 창이 지나 resume이 거부된다.
+      await this.contextProvider.ensureRunning();
+      // 그 사이 stop()이 눌렸거나 더 나중의 play()가 주도권을 가져갔으면 여기서
+      // 끝낸다. 아직 타이머도 그래프도 안 만들었으니 되돌릴 것은 없다. stop()이
+      // 이미 playing을 false로 되돌려 놓았으니 여기서 다시 만질 필요도 없다.
+      if (!this.isCurrent(session)) return { status: "superseded" };
+
+      // **두 번째** await. 이 창에서도 stop()이나 더 나중의 play()가 끼어들 수
+      // 있으므로 세션을 다시 확인한다. 첫 번째 확인만으로는 막지 못한다.
+      const readiness = await this.bank.ensureReady(
+        ctx,
+        instrumentsOf(this.song),
+      );
+      if (!this.isCurrent(session)) return { status: "superseded" };
+      if (!readiness.ok) {
+        // 이 세션이 아직 내 것이므로 playing을 되돌려야 다음 play()가 재시도된다.
+        this.playing = false;
+        return { status: "not-ready", failed: readiness.failed };
+      }
 
       this.ctx = ctx;
-
       this.buildGraph(ctx);
 
       const sink: NoteSink = {
@@ -133,10 +172,11 @@ export class Engine {
       // 함수이고, 테스트가 도는 node 환경에는 window가 없다.
       this.timerId = setInterval(() => this.onTimer(), TIMER_MS);
       this.onTimer();
+      return { status: "playing" };
     } catch (err) {
       // resume()이 거부되거나(자동재생 정책) getAudioContext()가 미지원
       // 브라우저에서 던지면, 타이머도 그래프도 없이 playing만 true로 남는다.
-      // 그대로 두면 다음 play() 호출이 최상단 가드(if (this.playing) return;)에
+      // 그대로 두면 다음 play() 호출이 최상단 가드(already-playing)에
       // 걸려 조용히 아무 일도 안 하므로, 재시도가 실제로 다시 시도되도록
       // 여기서 되돌린다. 그사이 stop()이 이미 session을 바꿔놨다면(=이미
       // playing=false) 손대지 않는다 — 이 실패가 그 세션 소유는 아니다.
@@ -145,6 +185,11 @@ export class Engine {
       }
       throw err;
     }
+  }
+
+  /** 내가 시작한 세션이 아직 최신인가. 아니면 그 사이 stop()이나 더 나중의 play()가 있었다. */
+  private isCurrent(session: number): boolean {
+    return this.playing && this.session === session;
   }
 
   stop(): void {
@@ -201,7 +246,8 @@ export class Engine {
    * 잘못된 곡(모르는 패턴 id, 트랙 악기와 맞지 않는 패턴)이면 `expandSong`이
    * 예외를 던지고, 그때 엔진은 **아무것도 바뀌지 않는다**(곡·이벤트·템포·
    * 악기 맵 모두 그대로). 그래서 무엇이든 바꾸기 전에 먼저 편다. 호출부는
-   * 넘기기 전에 `validateSong`/`parseSong`으로 검증해야 한다.
+   * 넘기기 전에 `validateSong`/`parseSong`으로 검증해야 한다. 악기 생성이
+   * 던져도 마찬가지다 — 새 맵은 지역 변수에 다 만든 뒤에야 바꿔 끼운다.
    */
   setSong(song: Song): boolean {
     if (this.playing) return false;
@@ -211,19 +257,26 @@ export class Engine {
     // 새 곡 길이에 옛 이벤트가 걸려 일찍 멈추는 반쪽 상태가 생기지 않는다.
     const events = expandSong(song);
 
+    // 새 맵은 지역 변수에 끝까지 만든다. this.instruments를 제자리에서 비우고
+    // 채우다 createInstrument가 던지면, 곡·이벤트는 옛 것인데 맵은 새 곡의 앞
+    // 트랙만 든 반쪽이 되어 옛 트랙 전체가 조용히 무음이 된다.
+    let instruments = this.instruments;
     if (this.ctx && this.pool && !sameTrackComposition(this.song, song)) {
-      this.instruments.clear();
+      instruments = new Map();
       for (const track of song.tracks) {
-        this.instruments.set(
+        instruments.set(
           track.id,
-          createInstrument(track.instrument, this.ctx, this.pool),
+          createInstrument(track.instrument, this.ctx, this.pool, this.bank),
         );
       }
     }
 
+    this.instruments = instruments;
     this.song = song;
     this.events = events;
     this.bpm = song.tempo;
+    // 새 곡이 쓰는 악기를 컨텍스트 없이 미리 받는다.
+    this.bank.prefetch(instrumentsOf(song));
     return true;
   }
 
@@ -258,7 +311,7 @@ export class Engine {
     for (const track of this.song.tracks) {
       this.instruments.set(
         track.id,
-        createInstrument(track.instrument, ctx, pool),
+        createInstrument(track.instrument, ctx, pool, this.bank),
       );
     }
 
@@ -278,8 +331,8 @@ export class Engine {
     }
 
     // 곡 끝을 지나도 마지막 노트의 릴리즈 테일이 아직 울리는 중이면
-    // 자르지 않는다. 피아노 최소 0.3초, 킥 고정 0.35초처럼 악기들은
-    // 의도적으로 음 길이보다 오래 울리도록 되어 있어서, 곡 길이만
+    // 자르지 않는다. 음이 있는 악기는 음 길이 뒤에 릴리즈를 타고, 드럼은
+    // 음 길이와 무관하게 샘플 길이만큼 울리는 원샷이라, 곡 길이만
     // 보고 바로 stop() -> releaseAll(5ms 페이드)하면 마지막 비트의 꼬리가
     // 매번 뚝 잘린다. 풀에 아직 소리 나는 보이스가 없을 때까지 기다린다.
     const pastEnd = scheduler.currentTick() > songLengthTicks(this.song);
