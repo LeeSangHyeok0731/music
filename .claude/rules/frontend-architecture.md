@@ -19,7 +19,7 @@ paths:
 
 ## 디렉터리 구조
 
-아래 구조 중 "(아직 없음)"이 아닌 것은 실제로 존재한다. 옛 타임라인·상태 계층(`components/timeline/`, `components/transport/`, `state/StudioProvider`)은 재구상에서 철거했고 편집 UI 하위 프로젝트에서 새로 만든다. 이 문서의 아래 절들이 `StudioProvider`를 말하는 곳은 그 옛 설계의 규칙이다 — 편집 UI를 설계할 때 다시 정한다.
+아래 구조 중 괄호로 없다고 표시하지 않은 것은 실제로 존재한다. 옛 타임라인·상태 계층(`components/timeline/`, `components/transport/`, `state/StudioProvider`)은 재구상에서 철거했고 편집 UI 하위 프로젝트에서 새로 만든다. 이 문서의 아래 절들이 `StudioProvider`를 말하는 곳은 그 옛 설계의 규칙이다 — 편집 UI를 설계할 때 다시 정한다.
 
 ```text
 app/                    Next.js App Router 엔트리포인트 (`/` = 소리 확인 화면)
@@ -29,7 +29,7 @@ components/verify/      소리 확인 화면 (편집 UI가 아니다)
 components/ui/          (아직 없음) 버튼, 슬라이더, 패널 등 공용 컨트롤
 state/                  (아직 없음) 편집 UI가 생길 때의 React 상태 (Context)
 scripts/                개발용 톤 생성(gen-dev-samples.mjs)
-public/samples/         악기 샘플 — 커밋된 파일 없음(gitignore). 지금은 `pnpm gen:dev-samples`의 개발용 톤. 실제 팩은 계획 Task 15
+public/samples/         (새 클론에는 없음 — gitignore) 악기 샘플. `pnpm gen:dev-samples`가 개발용 톤을 만든다. 실제 팩은 계획 Task 15
 ```
 
 `src/`, feature/entity 레이어, FSD는 두지 않는다. 이 규모에 맞지 않는다.
