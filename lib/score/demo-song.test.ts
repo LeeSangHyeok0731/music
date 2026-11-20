@@ -39,4 +39,39 @@ describe("데모 곡", () => {
       expect(track.events.length).toBeGreaterThan(0);
     }
   });
+
+  it("트랙 5개가 정해진 순서로 있다", () => {
+    expect(buildDemoSong().tracks.map((t) => t.id)).toEqual([
+      "track-piano",
+      "track-guitar",
+      "track-bass",
+      "track-drums",
+      "track-melody",
+    ]);
+  });
+
+  it("반주 트랙(피아노·기타·베이스·드럼)은 곡 끝까지 이어진다", () => {
+    const song = buildDemoSong();
+    const songEnd = DEMO_BARS * 1920;
+    for (const id of ["track-piano", "track-guitar", "track-bass", "track-drums"]) {
+      const track = song.tracks.find((t) => t.id === id);
+      const last = track?.clips.at(-1);
+      expect(last && last.start + last.length, id).toBe(songEnd);
+    }
+  });
+
+  it("멜로디 클립의 음 6개가 그대로 재생 이벤트 6개가 된다", () => {
+    const melody = expandSong(buildDemoSong()).find(
+      (t) => t.trackId === "track-melody",
+    );
+    // 멜로디 클립은 4마디 뒤(5마디째 첫 박, 7680틱)에서 시작한다.
+    expect(melody?.events.map((e) => [e.tick, e.pitch])).toEqual([
+      [7680, 72],
+      [8160, 76],
+      [8640, 79],
+      [9120, 76],
+      [9600, 77],
+      [10560, 74],
+    ]);
+  });
 });

@@ -124,7 +124,7 @@ describe("parseSong — 거부", () => {
     expectRejected(input, "겹칩니다");
   });
 
-  it("끝점을 반올림한 뒤에도 겹치는 클립은 거부한다", () => {
+  it("끝점을 반올림한 뒤에도 1틱 이상 겹치는 클립은 거부한다", () => {
     const input = raw(songWithNotes({ notes: [], bars: 2 }));
     input.tracks[0].clips = [
       // [0, 480.6) → [0, 481), [480.4, …) → [480, …): 1틱 겹친다.
@@ -154,9 +154,10 @@ describe("parseSong — 거부", () => {
     expectRejected(a, "tempo: ");
   });
 
-  it("NaN 음은 거부한다", () => {
-    // validateSong도 NaN을 거부하므로 이 경우만으로는 zod의 검사를 따로
-    // 증명하지 못한다. zod의 유한성 보장은 위 Infinity 템포 테스트가 맡는다.
+  it("NaN 음은 zod가 거부한다", () => {
+    // 경로 조각이 zod 형식(`tracks.0.clips.0.body.notes.0.start`, 점 구분·`body` 포함)이다.
+    // validateSong이 거부했다면 `tracks[0].clips[0].notes[0]` 형식이 나오므로, 이 단언은
+    // 거부가 구조 단계(zod의 유한성 검사)에서 일어났음을 고정한다.
     const b = raw();
     b.tracks[0].clips[0].body.notes[0].start = Number.NaN;
     expectRejected(b, "tracks.0.clips.0.body.notes.0.start");
@@ -297,25 +298,28 @@ describe("parseSong — 복구", () => {
     return result.repairs.join("\n");
   }
 
+  /** parseSong을 부를 때마다 새 입력을 만든다 — 앞선 호출이 입력을 바꿨어도 영향이 없게. */
+  function withTempo(tempo: number): any {
+    const input = raw();
+    input.tempo = tempo;
+    return input;
+  }
+
   it("범위를 벗어난 템포는 클램프한다", () => {
-    const a = raw();
-    a.tempo = 500;
-    expect(expectRepaired(a, "템포를 40~240 범위로").tempo).toBe(240);
-    const b = raw();
-    b.tempo = 10;
-    expect(expectRepaired(b, "템포를 40~240 범위로").tempo).toBe(40);
+    expect(expectRepaired(withTempo(500), "템포를 40~240 범위로").tempo).toBe(240);
+    expect(expectRepaired(withTempo(10), "템포를 40~240 범위로").tempo).toBe(40);
   });
 
   it("범위 안의 소수 템포는 반올림만 했다고 알린다", () => {
-    const a = raw();
-    a.tempo = 120.4;
-    expect(expectRepaired(a, "템포를 정수로 반올림했습니다 (120.4 → 120)").tempo).toBe(120);
-    expect(repairsOf(a)).not.toContain("범위");
+    expect(
+      expectRepaired(withTempo(120.4), "템포를 정수로 반올림했습니다 (120.4 → 120)").tempo,
+    ).toBe(120);
+    expect(repairsOf(withTempo(120.4))).not.toContain("범위");
 
-    const b = raw();
-    b.tempo = 239.6;
-    expect(expectRepaired(b, "템포를 정수로 반올림했습니다 (239.6 → 240)").tempo).toBe(240);
-    expect(repairsOf(b)).not.toContain("범위");
+    expect(
+      expectRepaired(withTempo(239.6), "템포를 정수로 반올림했습니다 (239.6 → 240)").tempo,
+    ).toBe(240);
+    expect(repairsOf(withTempo(239.6))).not.toContain("범위");
   });
 
   it("소수 틱은 반올림한다", () => {
@@ -346,6 +350,48 @@ describe("parseSong — 복구", () => {
       [1, 479],
       [480, 480],
     ]);
+  });
+
+  it("1틱 미만의 겹침은 끝점 반올림이 흡수한다", () => {
+    // a의 실제 끝은 0.5 + 479.6 = 480.1이라 b(480~)와 0.1틱 겹치지만, 판정은
+    // 반올림한 정수 끝점(480)으로 하므로 맞닿은 클립이 된다. start·length를 따로
+    // 반올림하면 a = [1, 481)이 되어 1틱 겹친다.
+    const input = raw(songWithNotes({ notes: [], bars: 2 }));
+    input.tracks[0].clips = [
+      { id: "a", start: 0.5, length: 479.6, body: { type: "notes", notes: [] } },
+      { id: "b", start: 480, length: 480, body: { type: "notes", notes: [] } },
+    ];
+    const song = expectRepaired(input, "반올림");
+    expect(song.tracks[0].clips.map((c) => [c.start, c.length])).toEqual([
+      [1, 479],
+      [480, 480],
+    ]);
+  });
+
+  it("1틱 미만의 곡 끝 초과도 끝점 반올림이 흡수한다", () => {
+    // 실제 끝 0.5 + 1919.6 = 1920.1은 곡 끝(1920)을 0.1틱 넘지만 반올림한 끝점은 1920이다.
+    // start·length를 따로 반올림하면 [1, 1921)이 되어 곡 밖으로 나가 거부된다.
+    const input = raw();
+    input.tracks[0].clips[0] = {
+      id: "a",
+      start: 0.5,
+      length: 1919.6,
+      body: { type: "notes", notes: [] },
+    };
+    const clip = expectRepaired(input, "반올림").tracks[0].clips[0];
+    expect([clip.start, clip.length]).toEqual([1, 1919]);
+  });
+
+  it("음도 끝점을 반올림하므로 클립 끝에 닿은 음은 잘리지 않는다", () => {
+    // [0.5, 1920) → [1, 1920). start·length를 따로 반올림하면 [1, 1921)이 되어
+    // '클립 끝에서 잘랐습니다'가 붙는다.
+    const input = raw(songWithNotes({ notes: [note(0.5, 1919.5)] }));
+    const result = parseSong(input);
+    if (!result.ok) throw new Error(result.errors.join("\n"));
+    expect(result.repairs).toEqual(["소수 틱 2개를 정수로 반올림했습니다"]);
+    const body = result.song.tracks[0].clips[0].body;
+    if (body.type !== "notes") throw new Error("notes 클립이 아니다");
+    expect(body.notes).toEqual([{ start: 1, length: 1919, pitch: 60, velocity: 0.5 }]);
   });
 
   it("곡 끝에 닿은 클립은 끝점을 반올림해도 곡 안에 남는다", () => {

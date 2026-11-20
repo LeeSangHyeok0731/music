@@ -14,8 +14,15 @@ import {
 import { validateSong } from "./validate";
 
 /**
- * 구조만 본다. 숫자의 정수성·범위·정렬·겹침은 여기서 보지 않는다 — 복구할
- * 수 있는 것은 `repair`가 고치고, 나머지는 `validateSong`이 거부한다.
+ * 구조를 본다. 틱(start·length)·pitch·velocity·템포·마디 수의 정수성·범위와
+ * 클립·음의 정렬·겹침은 여기서 보지 않는다 — 복구할 수 있는 것은 `repair`가
+ * 고치고, 나머지는 `validateSong`이 거부한다.
+ *
+ * 예외로 여기서 정수성·범위까지 보는 값:
+ * - `timeSignature`: 곡 길이(`bars × ticksPerBar`)를 정하므로 무제한이면 `MAX_BARS`
+ *   렌더 비용 가드가 뚫린다. 분자 1~`MAX_BEATS_PER_BAR` 정수, 분모 `BEAT_UNITS`
+ *   (`model.ts` 참고). 복구하지 않고 거부한다.
+ * - `chord.root`(0~11 정수)와 `meta`의 문자열 길이·편집자 수 상한.
  *
  * zod 4의 `z.number()`는 NaN과 ±Infinity를 거부한다(zod 3은 Infinity를 통과시켰다).
  */
@@ -124,10 +131,22 @@ function repair(song: Song, repairs: string[]): Song {
   let dropped = 0;
   let resorted = false;
 
-  const round = (value: number): number => {
-    const next = Math.round(value);
-    if (next !== value) rounded += 1;
-    return next;
+  /**
+   * 소수 틱 구간을 정수 틱으로 바꾼다. start와 length를 따로 반올림하지 않고 양
+   * 끝점을 반올림한다(start=round(start), end=round(start+length), length=end-start).
+   * 따로 하면 맞닿은 구간이 1틱 겹치거나 끝에 닿은 구간이 1틱 넘친다.
+   *
+   * **의도된 해석:** 겹침·곡 끝·클립 끝 판정은 반올림한 정수 끝점으로 한다. 그래서
+   * 1틱 미만의 겹침이나 초과(예: 실제 끝 480.1과 다음 시작 480)는 반올림이 흡수해
+   * 맞닿은 것이 되고, 반올림한 뒤에도 1틱 이상 겹치는 것만 거부된다.
+   * 끝점이 뒤집혀 length ≤ 0이 되면 그대로 두어 validateSong이 거부하게 한다.
+   */
+  const roundSpan = (start: number, length: number) => {
+    const nextStart = Math.round(start);
+    const nextLength = Math.round(start + length) - nextStart;
+    if (nextStart !== start) rounded += 1;
+    if (nextLength !== length) rounded += 1;
+    return { start: nextStart, length: nextLength };
   };
 
   const roundedTempo = Math.round(song.tempo);
@@ -140,14 +159,9 @@ function repair(song: Song, repairs: string[]): Song {
 
   const tracks = song.tracks.map((track) => {
     let clips: Clip[] = track.clips.map((clip) => {
-      // start와 length를 따로 반올림하지 않고 양 끝점을 반올림한다. 따로 하면
-      // 맞닿은 클립이 1틱 겹치거나 곡 끝에 닿은 클립이 1틱 넘친다.
-      // 끝점이 뒤집혀 length ≤ 0이 되면 그대로 두어 validateSong이 거부하게 한다.
-      const start = Math.round(clip.start);
-      const end = Math.round(clip.start + clip.length);
-      const length = end - start;
-      if (start !== clip.start) rounded += 1;
-      if (length !== clip.length) rounded += 1;
+      // 클립과 음 모두 끝점을 반올림한다(`roundSpan`). 음이 클립 끝을 넘는지도
+      // 반올림한 정수 끝점으로 판정하므로 1틱 미만의 초과는 잘리지 않는다.
+      const { start, length } = roundSpan(clip.start, clip.length);
 
       if (clip.body.type === "chord") {
         return { ...clip, start, length };
@@ -156,7 +170,7 @@ function repair(song: Song, repairs: string[]): Song {
       let notes = clip.body.notes.map((n) => {
         const velocity = clamp(n.velocity, 0, 1);
         if (velocity !== n.velocity) clampedVelocity += 1;
-        return { ...n, start: round(n.start), length: round(n.length), velocity };
+        return { ...n, ...roundSpan(n.start, n.length), velocity };
       });
 
       // 클립 길이가 올바를 때만 자르고 버린다. 길이가 틀린 클립은 거부로 넘어간다.
