@@ -250,9 +250,12 @@ export class Engine {
    *
    * 잘못된 곡(모르는 패턴 id, 트랙 악기와 맞지 않는 패턴)이면 `expandSong`이
    * 예외를 던지고, 그때 엔진은 **아무것도 바뀌지 않는다**(곡·이벤트·템포·
-   * 악기 맵 모두 그대로). 그래서 무엇이든 바꾸기 전에 먼저 편다. 호출부는
-   * 넘기기 전에 `validateSong`/`parseSong`으로 검증해야 한다. 악기 생성이
+   * 악기 맵 모두 그대로). 그래서 무엇이든 바꾸기 전에 먼저 편다. 악기 생성이
    * 던져도 마찬가지다 — 새 맵은 지역 변수에 다 만든 뒤에야 바꿔 끼운다.
+   *
+   * 파일·링크처럼 믿을 수 없는 입력은 넘기기 전에 반드시 `parseSong`을
+   * 거친다. `validateSong`은 이미 타입이 맞는 곡의 구조 불변식만 보고
+   * `chord.quality`는 보지 않으므로 `parseSong`의 대체가 아니다.
    */
   setSong(song: Song): boolean {
     if (this.playing) return false;
