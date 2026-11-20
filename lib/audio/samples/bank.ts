@@ -87,6 +87,12 @@ export class SampleBank implements SamplePort {
   readonly getSnapshot = (): Readonly<Record<InstrumentId, SampleStatus>> =>
     this.snapshot;
 
+  /**
+   * 리스너는 상태를 publish하는 도중에 **동기로** 불린다. 그러니 리스너는
+   * 던지면 안 된다 — 던지면 진행 중인 받기/디코드의 상태 전이가 중간에 끊겨
+   * 상태가 어긋난다(여기서 잡아 주지 않는다). 리스너 안에서 뱅크를 다시
+   * 불러도 되지만(재진입), 다시 렌더를 예약하는 정도가 권장된다.
+   */
   readonly subscribe = (listener: () => void): (() => void) => {
     this.listeners.add(listener);
     return () => {
@@ -98,7 +104,7 @@ export class SampleBank implements SamplePort {
     if (this.opts.enabled === false) return;
     for (const instrument of instruments) {
       // 실패는 상태(error)로 드러난다. 여기서 던지면 처리되지 않은 거부가 된다.
-      this.startFetch(instrument).catch(() => {});
+      this.startFetch(instrument).fetched.catch(() => {});
     }
   }
 
@@ -134,25 +140,41 @@ export class SampleBank implements SamplePort {
       : null;
   }
 
-  /** 옛 시도의 늦게 도착한 결과는 버린다 — 지금 항목이 아니면 아무것도 하지 않는다. */
+  /**
+   * 옛 시도의 늦게 도착한 결과는 버린다 — 지금 항목이 아니면 아무것도 하지 않는다.
+   * 같은 항목이 ready가 된 뒤에는 loading/downloaded로 되돌아가지 않는다
+   * (늦게 도착한 알림이 소리를 낼 수 있는 악기를 못 내는 것처럼 보이게 하면 안 된다).
+   */
   private publish(
     instrument: InstrumentId,
     entry: Entry,
     status: SampleStatus,
   ): void {
     if (this.entries.get(instrument) !== entry) return;
+    if (
+      entry.status === "ready" &&
+      (status === "downloaded" || status === "loading")
+    ) {
+      return;
+    }
     entry.status = status;
     if (this.snapshot[instrument] === status) return;
     this.snapshot = { ...this.snapshot, [instrument]: status };
     for (const listener of this.listeners) listener();
   }
 
-  private startFetch(
-    instrument: InstrumentId,
-  ): Promise<Map<string, ArrayBuffer>> {
+  /**
+   * 지금 시도(항목과 그 받기 약속)를 돌려준다. 진행 중이거나 끝난 시도가
+   * 있으면 그것을, 없거나 error면 새로 시작한다. 부르는 쪽은 돌려받은 항목을
+   * 붙잡고 쓴다 — 맵을 다시 읽으면 그 사이 재진입이 바꿔 놓은 항목을 볼 수 있다.
+   */
+  private startFetch(instrument: InstrumentId): {
+    entry: Entry;
+    fetched: Promise<Map<string, ArrayBuffer>>;
+  } {
     const current = this.entries.get(instrument);
     if (current && current.status !== "error" && current.fetched) {
-      return current.fetched;
+      return { entry: current, fetched: current.fetched };
     }
 
     const entry: Entry = {
@@ -163,8 +185,10 @@ export class SampleBank implements SamplePort {
       buffers: null,
     };
     this.entries.set(instrument, entry);
-    this.publish(instrument, entry, "loading");
 
+    // fetched와 그 처리기를 loading을 알리기 *전에* 단다. 알림은 리스너를 동기로
+    // 부르므로, 리스너가 뱅크를 다시 부르면 이 항목을 이미 받는 중으로 봐야 한다
+    // — 아니면 두 번째 항목을 만들고 다시 받는다.
     const dir = `${this.opts.baseUrl}/${instrument}`;
     entry.fetched = (async () => {
       const raw = await this.opts.fetchBytes(`${dir}/manifest.json`);
@@ -184,7 +208,9 @@ export class SampleBank implements SamplePort {
       () => this.publish(instrument, entry, "downloaded"),
       () => this.publish(instrument, entry, "error"),
     );
-    return entry.fetched;
+    const fetched = entry.fetched;
+    this.publish(instrument, entry, "loading");
+    return { entry, fetched };
   }
 
   private decode(ctx: Decoder, instrument: InstrumentId): Promise<void> {
@@ -193,8 +219,12 @@ export class SampleBank implements SamplePort {
     // 이미 디코드 중이면 같은 약속을 돌려준다 — 두 번 디코드하지 않는다.
     if (existing?.decoding) return existing.decoding;
 
-    const fetched = this.startFetch(instrument);
-    const entry = this.entries.get(instrument)!;
+    const { entry, fetched } = this.startFetch(instrument);
+    // startFetch의 loading 알림 안에서 리스너가 ensureReady를 다시 불렀다면
+    // 이 항목의 디코드는 이미 시작됐다. 합류한다 — 덮어쓰면 두 번 디코드한다.
+    if (entry.status === "ready") return Promise.resolve();
+    if (entry.decoding) return entry.decoding;
+
     entry.decoding = (async () => {
       try {
         const bytes = await fetched;

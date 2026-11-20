@@ -20,9 +20,24 @@ export type ParamCall = {
   time: number;
 };
 
+/** 가짜 decodeAudioData가 받은 입력 하나. */
+export type DecodedInput = {
+  /** 받은 객체 그대로. 디코드 뒤에는 분리돼 byteLength가 0이다. */
+  buffer: ArrayBuffer;
+  /** 분리하기 전의 크기. */
+  byteLength: number;
+  /** 분리하기 전에 떠 둔 사본. */
+  bytes: Uint8Array;
+};
+
 export class FakeAudioParam {
-  value = 0;
+  value: number;
   readonly calls: ParamCall[] = [];
+
+  /** 실제 AudioParam처럼 노드마다 기본값이 다르다(대부분 0, playbackRate는 1). */
+  constructor(defaultValue = 0) {
+    this.value = defaultValue;
+  }
 
   setValueAtTime(value: number, time: number): FakeAudioParam {
     this.value = value;
@@ -127,7 +142,8 @@ class FakeOscillatorNode extends FakeScheduledSource {
 
 class FakeBufferSourceNode extends FakeScheduledSource {
   buffer: unknown = null;
-  readonly playbackRate = new FakeAudioParam();
+  /** 실제 노드처럼 1에서 시작한다 — 속도를 안 정한 샘플러가 맞아 보이면 안 된다. */
+  readonly playbackRate = new FakeAudioParam(1);
 
   constructor() {
     super("bufferSource");
@@ -214,13 +230,33 @@ export class FakeAudioContext {
     return { getChannelData: () => data };
   }
 
-  /** decodeAudioData에 들어온 바이트. 몇 번, 무엇을 디코드했는지 검사한다. */
-  readonly decoded: ArrayBuffer[] = [];
-  /** true면 decodeAudioData가 실패한다. */
+  /**
+   * decodeAudioData가 받은 바이트. 몇 번, 무엇을 디코드했는지 검사한다.
+   * `buffer`는 받은 객체 그대로라 분리(detach)된 뒤다 — 크기와 내용은
+   * 분리하기 전에 떠 둔 `byteLength`와 `bytes`로 본다.
+   */
+  readonly decoded: DecodedInput[] = [];
+  /** true면 decodeAudioData가 실패한다(실제처럼 바이트는 분리된 뒤에). */
   failDecode = false;
 
+  /**
+   * 실제 브라우저처럼 받은 ArrayBuffer를 분리한다 — 디코드가 실패해도.
+   * 그래서 같은 바이트를 두 번 넘기면 두 번째는 거부된다. 이걸 흉내내지
+   * 않으면 "실패 뒤 재시도는 새로 받는다"는 불변식을 아무도 지키지 않는다.
+   */
   async decodeAudioData(data: ArrayBuffer): Promise<AudioBuffer> {
-    this.decoded.push(data);
+    if (data.byteLength === 0) {
+      throw new DOMException(
+        "decodeAudioData: 분리(detach)됐거나 빈 ArrayBuffer입니다",
+        "EncodingError",
+      );
+    }
+    this.decoded.push({
+      buffer: data,
+      byteLength: data.byteLength,
+      bytes: new Uint8Array(data.slice(0)),
+    });
+    structuredClone(data, { transfer: [data] });
     if (this.failDecode) throw new Error("decode 실패");
     return {
       duration: 1,

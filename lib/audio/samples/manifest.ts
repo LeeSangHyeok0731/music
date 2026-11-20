@@ -30,9 +30,10 @@ const zoneSchema = z
     loPitch: midi,
     hiPitch: midi,
   })
-  .refine((z) => z.loPitch <= z.centerPitch && z.centerPitch <= z.hiPitch, {
-    message: "loPitch <= centerPitch <= hiPitch 여야 합니다",
-  });
+  .refine(
+    (zone) => zone.loPitch <= zone.centerPitch && zone.centerPitch <= zone.hiPitch,
+    { message: "loPitch <= centerPitch <= hiPitch 여야 합니다" },
+  );
 
 const manifestSchema = z.object({
   instrument: z.enum(INSTRUMENT_IDS),
@@ -62,12 +63,16 @@ export function parseManifest(
 /**
  * pitch를 덮는 존을 고른다. 어느 존도 덮지 않으면 존의 범위까지 거리가
  * 가장 가까운 존을 돌려준다 — 범위 밖의 음이 조용히 무음이 되는 일이 없게
- * 한다. 거리가 같으면 목록에서 앞선 존이다.
+ * 한다. 거리가 같으면 목록에서 앞선 존이다. 존이 없으면 던진다 — 고를 것이
+ * 없는데 undefined를 존인 척 돌려주면 호출부에서 엉뚱하게 터진다.
  */
 export function findZone(
   zones: readonly SampleZone[],
   pitch: number,
 ): SampleZone {
+  if (zones.length === 0) {
+    throw new Error(`음 ${pitch}에 맞는 샘플 존을 고를 수 없습니다: 존이 없습니다`);
+  }
   let best = zones[0];
   let bestDistance = Number.POSITIVE_INFINITY;
   for (const zone of zones) {

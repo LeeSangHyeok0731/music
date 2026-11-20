@@ -60,6 +60,17 @@ describe("findZone", () => {
     expect(findZone(ZONES, 57).file).toBe("low.wav"); // 틈: low와 2, high와 8
     expect(findZone(ZONES, 63).file).toBe("high.wav"); // 틈: low와 8, high와 2
   });
+
+  it("틈에서 두 존까지 거리가 같으면 목록에서 앞선 존을 고른다", () => {
+    // 60은 low(…55)와 5, high(65…)와 5
+    expect(findZone(ZONES, 60).file).toBe("low.wav");
+    // 음높이가 아니라 목록 순서로 정해진다
+    expect(findZone([ZONES[1], ZONES[0]], 60).file).toBe("high.wav");
+  });
+
+  it("존이 하나도 없으면 던진다(undefined를 존인 척 돌려주지 않는다)", () => {
+    expect(() => findZone([], 60)).toThrow("존이 없습니다");
+  });
 });
 
 describe("playbackRateFor", () => {
