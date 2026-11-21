@@ -1,9 +1,16 @@
-import type { Chord, ChordSegment, Song } from "@/lib/score/model";
+import {
+  CHORD_QUALITIES,
+  type Chord,
+  type ChordSegment,
+  type Song,
+} from "@/lib/score/model";
 
 /**
  * 순수 편집 함수. UI는 이 함수만 부르고 규칙은 전부 여기에 둔다.
  *
- * - 입력 `song`은 변형하지 않고 새 `Song`을 돌려준다(건드리지 않은 부분은 공유).
+ * - 입력 `song`은 변형하지 않고 새 `Song`을 돌려준다. 건드리지 않은 구간·클립·
+ *   코드 객체는 입력과 **구조를 공유**한다(불변 갱신의 표준 방식) — 호출자는 결과의
+ *   코드 객체를 제자리에서 고치지 않는다. 새로 만드는 구간은 코드를 값으로 복사한다.
  * - 아무것도 바뀌지 않으면 **같은 참조**를 돌려준다. 실행취소가 빈 칸을 쌓지 않게 하기 위해서다.
  * - 결과는 항상 `validateSong(result) === []`이다.
  */
@@ -38,11 +45,25 @@ function isIndexBelow(index: number, limit: number): boolean {
   return Number.isInteger(index) && index >= 0 && index < limit;
 }
 
-/** 구간 `index`의 코드를 바꾼다. 같은 코드면 no-op. 범위 밖 `index`는 RangeError. */
+/**
+ * 구간 `index`의 코드를 바꾼다. 같은 코드면 no-op. 범위 밖 `index`와 유효하지
+ * 않은 `chord`(root가 0..11의 정수가 아니거나 알 수 없는 quality)는 RangeError —
+ * no-op 검사보다 먼저 던져서 결과가 항상 `validateSong`을 통과하게 한다.
+ */
 export function setChord(song: Song, index: number, chord: Chord): Song {
   const segments = song.progression;
   if (!isIndexBelow(index, segments.length)) {
     throw new RangeError(`코드 진행에 없는 구간입니다: ${index}`);
+  }
+  if (
+    !Number.isInteger(chord.root) ||
+    chord.root < 0 ||
+    chord.root > 11 ||
+    !(CHORD_QUALITIES as readonly string[]).includes(chord.quality)
+  ) {
+    throw new RangeError(
+      `유효하지 않은 코드입니다: ${chord.root} ${chord.quality}`,
+    );
   }
   if (sameChord(segments[index].chord, chord)) return song;
   const progression = segments.map((seg, i) =>

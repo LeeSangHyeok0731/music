@@ -117,6 +117,22 @@ describe("setChord", () => {
     expect(() => setChord(input, 1.5, F)).toThrow(RangeError);
     expect(() => setChord(input, Number.NaN, F)).toThrow(RangeError);
   });
+
+  it("유효하지 않은 코드(root 12·1.5·NaN·-1, 알 수 없는 quality)는 RangeError이고 입력은 그대로다", () => {
+    const input = base();
+    const snapshot = structuredClone(input);
+    const invalid: unknown[] = [
+      { root: 12, quality: "maj" },
+      { root: 1.5, quality: "maj" },
+      { root: Number.NaN, quality: "maj" },
+      { root: -1, quality: "maj" },
+      { root: 0, quality: "x" },
+    ];
+    for (const chord of invalid) {
+      expect(() => setChord(input, 1, chord as Chord)).toThrow(RangeError);
+      expect(input).toEqual(snapshot);
+    }
+  });
 });
 
 describe("splitSegment", () => {
@@ -163,6 +179,20 @@ describe("splitSegment", () => {
     // C 0~1000: 960에서 가르면 오른쪽이 40 < 960.
     const input = base([seg(0, 1000, C), seg(1000, 6680, AM)]);
     expect(splitSegment(input, 960)).toBe(input);
+  });
+
+  it("왼쪽 반이 반마디 미만이면(구간이 격자에 안 맞을 때) no-op", () => {
+    // 불러온 곡의 어긋난 구간: Am 500~3500. 960은 구간 안쪽이고 오른쪽은 2540으로 충분하지만
+    // 왼쪽이 960 - 500 = 460 < 960이라 쪼개지 않는다.
+    const input = base([
+      seg(0, 500, C),
+      seg(500, 3000, AM),
+      seg(3500, 4180, F),
+    ]);
+    const snapshot = structuredClone(input);
+    expect(validateSong(input)).toEqual([]);
+    expect(splitSegment(input, 960)).toBe(input);
+    expect(input).toEqual(snapshot);
   });
 
   it("뒤 구간 한가운데(5760)에서 가른다", () => {
@@ -377,17 +407,29 @@ describe("속성: 무작위 편집 열", () => {
     { root: 2, quality: "maj7" },
     { root: 11, quality: "min7" },
   ];
+  const INVALID_CHORDS = [
+    { root: 12, quality: "maj" },
+    { root: -1, quality: "min" },
+    { root: 1.5, quality: "maj7" },
+    { root: Number.NaN, quality: "dom7" },
+    { root: 0, quality: "x" },
+  ] as unknown as Chord[];
 
-  it("시드 20개 x 연산 200번 뒤에도 매번 유효하고 반마디 격자를 지킨다", () => {
+  /**
+   * 진행 연산 네 가지를 무작위로 섞는다. `aligned`이면 모든 구간 길이가 격자의
+   * 배수라는 것까지, 아니면(불러온 어긋난 곡) 유효성·양의 정수 길이·합계만 본다.
+   */
+  function runProgressionOps(makeSong: () => Song, aligned: boolean) {
     let changed = 0;
     let unchanged = 0;
     let rangeErrors = 0;
+    let invalidChordErrors = 0;
 
     for (let seed = 1; seed <= 20; seed++) {
       const rand = mulberry32(seed);
       const int = (lo: number, hi: number) =>
         lo + Math.floor(rand() * (hi - lo + 1));
-      let song = base();
+      let song = makeSong();
       const total = song.bars * 1920;
 
       for (let step = 0; step < 200; step++) {
@@ -404,7 +446,21 @@ describe("속성: 무작위 편집 열", () => {
         let next: Song;
         try {
           if (op === 0) {
-            next = setChord(prev, index, CHORDS[int(0, CHORDS.length - 1)]);
+            // 가끔 잘못된 코드도 섞는다: 어떤 경우에도 잘못된 곡이 나오면 안 된다.
+            const invalid = rand() < 0.15;
+            const chord = invalid
+              ? INVALID_CHORDS[int(0, INVALID_CHORDS.length - 1)]
+              : CHORDS[int(0, CHORDS.length - 1)];
+            if (invalid) {
+              // 인덱스는 유효하게: 던지는 이유가 코드 검증임을 분명히 한다.
+              expect(() => setChord(prev, int(0, n - 1), chord)).toThrow(
+                RangeError,
+              );
+              invalidChordErrors++;
+              expect(prev).toEqual(prevClone);
+              continue;
+            }
+            next = setChord(prev, index, chord);
           } else if (op === 1) {
             next = splitSegment(prev, tick);
           } else if (op === 2) {
@@ -424,8 +480,10 @@ describe("속성: 무작위 편집 열", () => {
         expect(prev).toEqual(prevClone); // 입력 불변
         let sum = 0;
         for (const s of song.progression) {
-          expect(s.length % SNAP_TICKS).toBe(0);
-          expect(s.length).toBeGreaterThanOrEqual(SNAP_TICKS);
+          if (aligned) expect(s.length % SNAP_TICKS).toBe(0);
+          expect(Number.isInteger(s.length)).toBe(true);
+          expect(s.length).toBeGreaterThan(0);
+          if (aligned) expect(s.length).toBeGreaterThanOrEqual(SNAP_TICKS);
           sum += s.length;
         }
         expect(sum).toBe(total);
@@ -444,5 +502,18 @@ describe("속성: 무작위 편집 열", () => {
     expect(changed).toBeGreaterThan(300);
     expect(unchanged).toBeGreaterThan(100);
     expect(rangeErrors).toBeGreaterThan(100);
+    expect(invalidChordErrors).toBeGreaterThan(20);
+  }
+
+  it("시드 20개 x 연산 200번 뒤에도 매번 유효하고 반마디 격자를 지킨다(잘못된 코드 포함)", () => {
+    runProgressionOps(() => base(), true);
+  });
+
+  it("어긋난 불러온 곡(구간이 격자에 안 맞음)에서도 유효하고 길이 합이 곡 길이다", () => {
+    runProgressionOps(
+      () =>
+        base([seg(0, 1000, C), seg(1000, 1500, AM), seg(2500, 5180, F)]),
+      false,
+    );
   });
 });
