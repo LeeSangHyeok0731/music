@@ -13,6 +13,7 @@ import {
 import { Engine, type PlayResult } from "@/lib/audio/engine";
 import { defaultSampleBank, type SampleStatus } from "@/lib/audio/samples/bank";
 import { AUTOSAVE_KEY, loadSong, serializeSong } from "@/lib/score/autosave";
+import { shrinkDiscardsClips } from "@/lib/score/bars";
 import { buildDemoSong } from "@/lib/score/demo-song";
 import * as Edit from "@/lib/score/edit";
 import {
@@ -67,6 +68,7 @@ const PLAY_FAILED = "소리를 시작하지 못했습니다. 재생 버튼을 �
 const SAVE_FAILED = "브라우저에 저장하지 못했습니다";
 const EDIT_FAILED = "편집을 적용하지 못했습니다";
 const ENGINE_SYNC_FAILED = "곡을 엔진에 적용하지 못했습니다";
+const BARS_SHRUNK = "마디를 줄였습니다 — 되돌리기로 복구할 수 있습니다";
 
 function notReadyMessage(failed: readonly InstrumentId[]): string {
   const names = failed.map((i) => INSTRUMENT_LABEL[i]).join(", ");
@@ -342,9 +344,16 @@ export function StudioProvider({
       setClipPattern: (...a) => applyEdit((s) => Edit.setClipPattern(s, ...a)),
       setTrackPattern: (...a) =>
         applyEdit((s) => Edit.setTrackPattern(s, ...a)),
-      setBars: (...a) => applyEdit((s) => Edit.setBars(s, ...a)),
+      setBars: (...a) => {
+        const before = historyRef.current.present;
+        applyEdit((s) => Edit.setBars(s, ...a));
+        // 커밋된 결과(막히거나 바뀐 게 없으면 곡이 그대로다)가 클립을 잘랐을 때만 알린다.
+        if (shrinkDiscardsClips(before, historyRef.current.present)) {
+          showMessage(BARS_SHRUNK);
+        }
+      },
     }),
-    [applyEdit],
+    [applyEdit, showMessage],
   );
 
   const undo = useCallback(() => {

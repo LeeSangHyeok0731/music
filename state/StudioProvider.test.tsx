@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AUTOSAVE_KEY, loadSong, serializeSong } from "@/lib/score/autosave";
 import { buildDemoSong, DEMO_BARS } from "@/lib/score/demo-song";
+import { setBars } from "@/lib/score/edit";
 import type { Song } from "@/lib/score/model";
 import { songLengthTicks } from "@/lib/score/time";
 import { StudioProvider } from "@/state/StudioProvider";
@@ -828,5 +829,50 @@ describe("10. useStudio", () => {
       return null;
     }
     expect(() => render(<Outside />)).toThrow(/StudioProvider/);
+  });
+});
+
+describe("11. 마디를 줄일 때 안내", () => {
+  const SHRUNK = "마디를 줄였습니다 — 되돌리기로 복구할 수 있습니다";
+
+  it("클립이 잘리거나 지워지면 안내하고, 실행취소가 곡을 그대로 되살린다", () => {
+    const { api } = setup();
+    const before = api().song;
+
+    // 데모의 마지막 마디에는 클립이 걸쳐 있다(7마디로 줄이면 잘린다).
+    act(() => api().edit.setBars(7));
+    expect(api().song.bars).toBe(7);
+    expect(api().message).toBe(SHRUNK);
+
+    act(() => api().undo());
+    expect(api().song).toBe(before);
+    expect(api().song.bars).toBe(DEMO_BARS);
+  });
+
+  it("빈 마디를 줄이거나 늘릴 때는 안내하지 않는다", () => {
+    const { api } = setup();
+    act(() => api().edit.setBars(9));
+    expect(api().message).toBeNull();
+    act(() => api().edit.setBars(8));
+    expect(api().song.bars).toBe(8);
+    expect(api().message).toBeNull();
+  });
+
+  it("편집이 막힌 동안(재생 대기 중)의 줄이기는 곡도 안내도 바꾸지 않는다", async () => {
+    const { api } = setup({ playMode: "manual" });
+    act(() => {
+      void api().play();
+    });
+    act(() => api().edit.setBars(2));
+    expect(api().song.bars).toBe(DEMO_BARS);
+    expect(api().message).toBeNull();
+  });
+
+  it("줄이기가 아무것도 바꾸지 않으면(최소 1마디) 안내하지 않는다", () => {
+    const { api } = setup({
+      stored: { [AUTOSAVE_KEY]: serializeSong(setBars(buildDemoSong(), 1)) },
+    });
+    act(() => api().edit.setBars(1));
+    expect(api().message).toBeNull();
   });
 });

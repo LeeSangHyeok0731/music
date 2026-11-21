@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { songLengthTicks } from "@/lib/score/time";
 
+import { BARS_CONTROL_WIDTH } from "./BarsControl";
 import { BeatGrid } from "./BeatGrid";
 import { Ruler } from "./Ruler";
 import { Studio } from "./Studio";
@@ -184,6 +185,18 @@ describe("Studio 스크롤 구조", () => {
     expect(playhead.parentElement).toBe(screen.getByTestId("stage"));
     expect(playhead.className).toContain("top-0");
     expect(playhead.className).toContain("bottom-0");
+  });
+
+  it("마디 컨트롤은 타임라인 안 스테이지 오른쪽에 눈금자 행 높이로 있어 함께 스크롤된다", () => {
+    renderWithStudio(<Studio />);
+    const timeline = screen.getByTestId("timeline");
+    const stage = screen.getByTestId("stage");
+    const control = screen.getByTestId("bars-control");
+    expect(control.parentElement).toBe(timeline);
+    expect(stage.nextElementSibling).toBe(control);
+    expect(control.style.height).toBe(`${RULER_HEIGHT}px`);
+    expect(stage.style.minWidth).toContain(`${BARS_CONTROL_WIDTH}px`);
+    expect(stage.className).toContain("shrink-0");
   });
 
   it("헤더 열의 눈금 칸은 눈금자와 같은 높이다", () => {
