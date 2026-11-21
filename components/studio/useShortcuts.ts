@@ -143,8 +143,12 @@ export function useShortcuts(): void {
         return;
       }
 
-      // 한글 IME 등 비라틴 배열에서는 key가 z가 아니므로 물리 키로도 본다.
-      if (e.key.toLowerCase() === "z" || e.code === "KeyZ") {
+      // 한글 IME 등 비라틴 배열에서는 key가 ASCII가 아니므로(예: "ㅋ") 물리 키 KeyZ로도 본다.
+      // key가 ASCII면 그대로 믿는다 — Dvorak 같은 배열에서 KeyZ 위치의 다른 글자(;)를 z로 오인하지 않는다.
+      const isZ =
+        e.key.toLowerCase() === "z" ||
+        (e.code === "KeyZ" && /[^\x00-\x7f]/.test(e.key));
+      if (isZ) {
         if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey) return;
         if (isTextLike(target)) return;
         if (!studio.editable || !studio.canUndo) return;

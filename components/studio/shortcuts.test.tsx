@@ -710,6 +710,14 @@ describe("Ctrl+Z / Cmd+Z — 실행취소", () => {
     expect(h.studio().song.bars).toBe(8);
   });
 
+  it("key가 ASCII면 물리 키 KeyZ를 z로 보지 않는다(Dvorak의 Ctrl+;)", () => {
+    const h = renderEditor();
+    editOnce(h);
+    const ev = press(document.body, ";", { ctrlKey: true, code: "KeyZ" });
+    expect(ev.defaultPrevented).toBe(false);
+    expect(h.studio().song.bars).toBe(9);
+  });
+
   it("key가 문자열이 아닌 합성 이벤트(자동완성 등)는 던지지 않고 무시한다", () => {
     const h = renderEditor();
     editOnce(h);
