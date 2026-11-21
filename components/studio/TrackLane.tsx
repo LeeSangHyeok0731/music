@@ -36,6 +36,8 @@ interface PendingAdd {
   y: number;
   /** 누른 자리의 곡 틱. 놓을 때의 위치가 아니라 누른 위치에 추가한다. */
   tick: number;
+  /** Shift를 누르고 눌렀다: 패턴 클립 대신 빈 음 클립을 만든다(화음 악기만). */
+  shift: boolean;
 }
 
 interface TrackLaneViewProps {
@@ -52,8 +54,12 @@ interface TrackLaneViewProps {
     | "removeClip"
     | "setClipPattern"
     | "setTrackPattern"
+    | "bakeClipToNotes"
+    | "emptyNotesClip"
   >;
   select(selection: Selection): void;
+  /** 피아노롤을 연다. `opener`는 닫을 때 포커스를 돌려받을 요소. 없으면 열지 않는다(레인만 단독으로 쓰는 경우). */
+  onOpenRoll?(trackId: string, clipId: string, opener: HTMLElement): void;
   /** 테스트용: 이 뷰가 커밋(렌더 결과 반영)될 때마다 부른다. */
   onViewRender?: () => void;
 }
@@ -70,6 +76,7 @@ const TrackLaneView = memo(function TrackLaneView({
   selectedClipId,
   edit,
   select,
+  onOpenRoll,
   onViewRender,
 }: TrackLaneViewProps) {
   const laneRef = useRef<HTMLDivElement>(null);
@@ -98,6 +105,17 @@ const TrackLaneView = memo(function TrackLaneView({
     if (returnFocus && clipId !== undefined) {
       buttonRefs.current.get(clipId)?.focus({ preventScroll: true });
     }
+  };
+
+  // 팝오버의 두 버튼: 클립을 음 클립으로 바꾸고 팝오버를 닫은 다음(포커스는 클립 본문으로)
+  // 피아노롤을 연다. 팝오버 버튼은 곧 사라지므로 포커스를 돌려받을 요소는 클립 본문(앵커)이다.
+  const openRollFromPopover = (
+    from: OpenPopover,
+    convert: (trackId: string, clipId: string) => void,
+  ) => {
+    convert(trackId, from.clipId);
+    closePopover(true);
+    onOpenRoll?.(trackId, from.clipId, from.anchor);
   };
 
   const { clips, dragging, bindBody, bindHandle } = useClipDrag({
@@ -158,6 +176,7 @@ const TrackLaneView = memo(function TrackLaneView({
       x: e.clientX,
       y: e.clientY,
       tick,
+      shift: e.shiftKey,
     };
   };
   // 지운 클립 다음(없으면 이전) 클립 본문으로 포커스를 옮겨 키보드 포커스를 잃지 않게 한다.
@@ -182,6 +201,10 @@ const TrackLaneView = memo(function TrackLaneView({
     const clipId = planAddClip(song, trackId, pending.tick);
     if (clipId === null) return;
     edit.addClip(trackId, pending.tick);
+    // Shift+클릭: 같은 자리를 빈 음 클립으로 바꾼다(기록은 두 칸이다 — 되돌리기 한 번은 패턴 클립까지).
+    if (pending.shift && track.instrument !== "drums") {
+      edit.emptyNotesClip(trackId, clipId);
+    }
     select({ trackId, clipId });
   };
 
@@ -208,6 +231,11 @@ const TrackLaneView = memo(function TrackLaneView({
           dragging={dragging?.clipId === clip.id}
           body={bindBody(clip.id)}
           handle={bindHandle(clip.id)}
+          onEdit={
+            onOpenRoll && clip.body.type === "notes" && track.instrument !== "drums"
+              ? (opener) => onOpenRoll(trackId, clip.id, opener)
+              : undefined
+          }
           buttonRef={(el) => {
             if (el) buttonRefs.current.set(clip.id, el);
             else buttonRefs.current.delete(clip.id);
@@ -224,6 +252,8 @@ const TrackLaneView = memo(function TrackLaneView({
           current={openPattern}
           onPickClip={(id) => edit.setClipPattern(trackId, open.clipId, id)}
           onPickTrack={(id) => edit.setTrackPattern(trackId, id)}
+          onBake={() => openRollFromPopover(open, edit.bakeClipToNotes)}
+          onEmpty={() => openRollFromPopover(open, edit.emptyNotesClip)}
           onClose={closePopover}
         />
       )}
@@ -234,9 +264,12 @@ const TrackLaneView = memo(function TrackLaneView({
 /** 트랙 한 줄. `data-testid="track-lane-<id>"`가 타임라인 안의 한 행이다. */
 export function TrackLane({
   trackId,
+  onOpenRoll,
   onViewRender,
 }: {
   trackId: string;
+  /** `Studio`가 내려주는 안정된 콜백. */
+  onOpenRoll?: TrackLaneViewProps["onOpenRoll"];
   onViewRender?: () => void;
 }) {
   const { song, editable, edit, selection, select } = useStudio();
@@ -248,6 +281,7 @@ export function TrackLane({
       selectedClipId={selection?.trackId === trackId ? selection.clipId : null}
       edit={edit}
       select={select}
+      onOpenRoll={onOpenRoll}
       onViewRender={onViewRender}
     />
   );

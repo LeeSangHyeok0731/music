@@ -14,6 +14,7 @@ import { BARS_CONTROL_WIDTH } from "./BarsControl";
 import { BeatGrid } from "./BeatGrid";
 import { Ruler } from "./Ruler";
 import { Studio } from "./Studio";
+import { hasOpenModal } from "./modal";
 import { PX_PER_BAR, tickToX } from "./geometry";
 import {
   CHORD_LANE_HEIGHT,
@@ -39,6 +40,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  expect(hasOpenModal()).toBe(false);
   vi.useRealTimers();
   vi.unstubAllGlobals();
   restoreAudio();

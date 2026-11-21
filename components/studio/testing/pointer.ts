@@ -37,6 +37,8 @@ export interface PointerInit {
   pointerType?: string;
   /** false면 캡처를 무시하고 넘긴 요소로 그대로 보낸다. 기본 true. */
   retarget?: boolean;
+  /** Shift를 누른 채인가. 기본 false. */
+  shiftKey?: boolean;
 }
 
 /** `setPointerCapture`로 잡힌 포인터 id -> 캡처한 요소(`installPointerCaptureStubs`가 관리). */
@@ -59,6 +61,7 @@ export function firePointer(
     buttons = type === "pointerdown" || type === "pointermove" ? 1 : 0,
     pointerType = "mouse",
     retarget = true,
+    shiftKey = false,
   }: PointerInit,
 ): boolean {
   return fireEvent(
@@ -72,6 +75,7 @@ export function firePointer(
       button,
       buttons,
       pointerType,
+      shiftKey,
     }),
   );
 }

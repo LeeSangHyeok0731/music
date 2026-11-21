@@ -27,7 +27,7 @@ import { hasOpenModal } from "./modal";
  * **Space와 네이티브:** 클립·슬라이더를 마우스로 만지면 그 요소가 포커스를 가진다. 포커스된 모든
  * 요소 위의 Space를 무시하면 평소 흐름에서 Space가 죽는다. 그래서 Space를 네이티브에 맡기는 대상은
  * 입력 계열(텍스트·select·textarea·contenteditable·체크박스·라디오·파일·색), `summary`, `a`,
- * `[role=dialog]` 안, 그리고 **키보드로 포커스된**(`:focus-visible`) 버튼 계열(`button`,
+ * 팝오버 대화상자(`[role=dialog]`, 단 `aria-modal="true"`인 피아노롤은 제외 — 그 안에서도 Space는 재생/정지다), 그리고 **키보드로 포커스된**(`:focus-visible`) 버튼 계열(`button`,
  * `[role=button]`, `[role=separator]`, 버튼형 `input`)뿐이다. 마우스로 포커스된 버튼과 range 슬라이더
  * (Space 동작이 없다) 위에서는 재생/정지한다. 처리한 Space의 `keyup`은 막는다(브라우저에 따라 버튼의
  * 클릭이 keyup에서 일어난다).
@@ -46,7 +46,7 @@ import { hasOpenModal } from "./modal";
 
 /** Space를 항상 네이티브(또는 자체 키 처리)에 맡기는 요소. */
 const SPACE_NATIVE =
-  'select, textarea, summary, a, [contenteditable]:not([contenteditable="false"]), [role="dialog"]';
+  'select, textarea, summary, a, [contenteditable]:not([contenteditable="false"]), [role="dialog"]:not([aria-modal="true"])';
 
 /** 키보드로 포커스됐을 때만 Space를 네이티브에 맡기는 버튼 계열. */
 const BUTTON_LIKE = 'button, [role="button"], [role="separator"]';

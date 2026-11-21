@@ -18,6 +18,10 @@ export interface PatternPopoverProps {
   current: string;
   onPickClip(patternId: string): void;
   onPickTrack(patternId: string): void;
+  /** "음으로 바꾸기": 지금 코드 진행으로 펼친 음 클립으로 바꾸고 피아노롤을 연다. 드럼에는 보이지 않는다. */
+  onBake(): void;
+  /** "빈 음 클립으로": 같은 자리의 빈 음 클립으로 바꾸고 피아노롤을 연다. 드럼에는 보이지 않는다. */
+  onEmpty(): void;
   /** `returnFocus`: 키보드로 닫을 때만 참(바깥을 눌렀다면 그 자리 포커스를 뺏지 않는다). */
   onClose(returnFocus: boolean): void;
 }
@@ -37,6 +41,8 @@ export function PatternPopover({
   current,
   onPickClip,
   onPickTrack,
+  onBake,
+  onEmpty,
   onClose,
 }: PatternPopoverProps) {
   const rootRef = useRef<HTMLDivElement>(null);
@@ -78,6 +84,16 @@ export function PatternPopover({
           </button>
         ))}
       </div>
+      {instrument !== "drums" && (
+        <div className="mt-2 flex flex-col gap-1 border-t border-white/10 pt-2">
+          <button type="button" className={BUTTON} onClick={onBake}>
+            음으로 바꾸기
+          </button>
+          <button type="button" className={BUTTON} onClick={onEmpty}>
+            빈 음 클립으로
+          </button>
+        </div>
+      )}
       <label className="mt-2 flex items-center gap-2 text-xs text-zinc-300">
         <input
           type="checkbox"

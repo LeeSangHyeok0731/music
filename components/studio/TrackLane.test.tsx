@@ -15,6 +15,7 @@ import { patternsFor } from "@/lib/score/patterns";
 import { songWithPatterns } from "@/lib/score/testing/builders";
 
 import { ChordLane } from "./ChordLane";
+import { hasOpenModal } from "./modal";
 import { Studio } from "./Studio";
 import { TrackLane } from "./TrackLane";
 import {
@@ -43,6 +44,8 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  // 팝오버·모달 카운터가 새면 다음 테스트와 전역 단축키로 번진다.
+  expect(hasOpenModal()).toBe(false);
   vi.useRealTimers();
   vi.restoreAllMocks();
   restorePointer();
@@ -1032,8 +1035,13 @@ describe("TrackLane 패턴 팝오버", () => {
     const names = within(d)
       .getAllByRole("button")
       .map((b) => b.textContent);
-    expect(names).toEqual(patternsFor("piano").map((p) => patternLabel(p.id)));
-    expect(names).toHaveLength(5);
+    // 패턴 5개 뒤에 음 클립으로 바꾸는 두 버튼이 이어진다.
+    expect(names).toEqual([
+      ...patternsFor("piano").map((p) => patternLabel(p.id)),
+      "음으로 바꾸기",
+      "빈 음 클립으로",
+    ]);
+    expect(names).toHaveLength(7);
     const pressed = within(d)
       .getAllByRole("button")
       .filter((b) => b.getAttribute("aria-pressed") === "true")
