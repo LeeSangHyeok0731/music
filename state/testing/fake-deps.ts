@@ -38,6 +38,13 @@ export type FakeEngine = StudioEngine & {
   setMetronome: Mock<(on: boolean) => void>;
   currentTick: Mock<() => number>;
   dispose: Mock<() => void>;
+  /**
+   * `dispose()`가 불린 뒤 참이고, 엔진을 다시 쓰면(`setSong`이 받아들여지거나 `play()`) 거짓으로
+   * 돌아온다. 실제 엔진이 그렇다: `dispose()`는 그래프만 비우고 곡·템포는 남기며, 다음
+   * `setSong`·`play()`가 그래프를 다시 만든다. StrictMode의 모의 언마운트가 엔진을 정리한 채
+   * 두면(Provider가 다시 곡을 맞추지 않으면) 이 값이 참으로 남는다.
+   */
+  readonly disposed: boolean;
 };
 
 export type FakeBank = StudioBank & {
@@ -84,6 +91,7 @@ export type FakeDepsOptions = {
 
 export function createFakeDeps(options: FakeDepsOptions = {}): FakeDeps {
   let busy = false;
+  let disposed = false;
   let waiting: {
     resolve: (r: PlayResult) => void;
     reject: (e: unknown) => void;
@@ -91,6 +99,7 @@ export function createFakeDeps(options: FakeDepsOptions = {}): FakeDeps {
 
   const engine: FakeEngine = {
     play: vi.fn(() => {
+      disposed = false;
       if (busy) return Promise.resolve<PlayResult>({ status: "already-playing" });
       busy = true;
       const mode = fake.playMode;
@@ -118,13 +127,21 @@ export function createFakeDeps(options: FakeDepsOptions = {}): FakeDeps {
     stop: vi.fn(() => {
       busy = false;
     }),
-    setSong: vi.fn(() => !busy),
+    setSong: vi.fn(() => {
+      if (busy) return false;
+      disposed = false;
+      return true;
+    }),
     setTempo: vi.fn(),
     setMetronome: vi.fn(),
     currentTick: vi.fn(() => 0),
     dispose: vi.fn(() => {
       busy = false;
+      disposed = true;
     }),
+    get disposed() {
+      return disposed;
+    },
     onStop: null,
   };
 
