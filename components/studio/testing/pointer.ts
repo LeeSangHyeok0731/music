@@ -12,10 +12,18 @@ import { fireEvent } from "@testing-library/react";
  * firePointer(lane, "pointermove", { clientX: 96 + 200, pointerId: 1 });
  * firePointer(lane, "pointerup", { clientX: 96 + 200, pointerId: 1 });
  * ```
+ *
+ * 실제 브라우저처럼 **포인터 캡처를 따른다**: `setPointerCapture`가 잡은 포인터의
+ * 이후 이벤트는 `firePointer`에 넘긴 요소가 아니라 캡처한 요소로 간다(jsdom은 이벤트를
+ * 다시 겨냥하지 않는다). 캡처 없이 다른 요소에 전달되는 경우를 흉내 내려면
+ * `retarget: false`. 캡처 없는 마우스는 눌린 요소 밖으로 나가면 이벤트를 잃는다.
  */
 
 export type PointerType =
-  "pointerdown" | "pointermove" | "pointerup" | "pointercancel";
+  | "pointerdown"
+  | "pointermove"
+  | "pointerup"
+  | "pointercancel";
 
 export interface PointerInit {
   clientX: number;
@@ -23,16 +31,38 @@ export interface PointerInit {
   pointerId?: number;
   /** 0 = 주 버튼(기본), 2 = 우클릭. */
   button?: number;
+  /** 눌린 버튼 비트. 기본: pointerdown·pointermove는 1(주 버튼 누름), pointerup·pointercancel은 0. */
+  buttons?: number;
+  /** 기본 "mouse". */
+  pointerType?: string;
+  /** false면 캡처를 무시하고 넘긴 요소로 그대로 보낸다. 기본 true. */
+  retarget?: boolean;
+}
+
+/** `setPointerCapture`로 잡힌 포인터 id -> 캡처한 요소(`installPointerCaptureStubs`가 관리). */
+const captureTargets = new Map<number, Element>();
+
+function deliveryTarget(el: Element, pointerId: number, retarget: boolean) {
+  const captured = captureTargets.get(pointerId);
+  return retarget && captured && captured.isConnected ? captured : el;
 }
 
 /** 포인터 이벤트를 보낸다. `fireEvent`를 거치므로 React 갱신이 `act`로 감싸진다. */
 export function firePointer(
   el: Element,
   type: PointerType,
-  { clientX, clientY = 0, pointerId = 1, button = 0 }: PointerInit,
+  {
+    clientX,
+    clientY = 0,
+    pointerId = 1,
+    button = 0,
+    buttons = type === "pointerdown" || type === "pointermove" ? 1 : 0,
+    pointerType = "mouse",
+    retarget = true,
+  }: PointerInit,
 ): boolean {
   return fireEvent(
-    el,
+    deliveryTarget(el, pointerId, retarget),
     new PointerEvent(type, {
       bubbles: true,
       cancelable: true,
@@ -40,6 +70,8 @@ export function firePointer(
       clientY,
       pointerId,
       button,
+      buttons,
+      pointerType,
     }),
   );
 }
@@ -101,17 +133,21 @@ export function installPointerCaptureStubs(): () => void {
       configurable: true,
       writable: true,
     });
-  define("setPointerCapture", function (this: object, id: number) {
+  define("setPointerCapture", function (this: Element, id: number) {
     idsOf(this).add(id);
+    captureTargets.set(id, this);
   });
-  define("releasePointerCapture", function (this: object, id: number) {
+  define("releasePointerCapture", function (this: Element, id: number) {
     idsOf(this).delete(id);
+    if (captureTargets.get(id) === this) captureTargets.delete(id);
   });
   define("hasPointerCapture", function (this: object, id: number) {
     return idsOf(this).has(id);
   });
 
+  captureTargets.clear();
   return () => {
+    captureTargets.clear();
     for (const [name, descriptor] of originals) {
       if (descriptor) Object.defineProperty(proto, name, descriptor);
       else delete proto[name];
@@ -141,7 +177,9 @@ export function fireBadPointer(
     bubbles: true,
     cancelable: true,
     pointerId,
+    buttons: type === "pointerdown" || type === "pointermove" ? 1 : 0,
+    pointerType: "mouse",
   });
   Object.defineProperty(ev, "clientX", { value: clientX });
-  fireEvent(el, ev);
+  fireEvent(deliveryTarget(el, pointerId, true), ev);
 }

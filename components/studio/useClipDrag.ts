@@ -111,16 +111,19 @@ interface Gesture {
   original: Song;
   /** 누른 시점의 클립 `start`(이동) 또는 `length`(길이). */
   base: number;
-  /** 마지막 미리보기 값(스냅 전). */
-  value: number;
+  /** 마지막 미리보기 결과(스냅·클램프 뒤 `start`/`length`). 커밋도 이 값이다. */
+  result: number;
+  /** 임계값을 넘어 드래그가 시작됐는가. */
   dragging: boolean;
-  target: Element;
+  /** 눌린 요소. 캡처를 잡은 요소이자 클릭의 기준(본문 버튼 = 팝오버 앵커)이다. */
+  target: HTMLElement;
 }
 
 interface PreviewState {
   kind: DragKind;
   clipId: string;
   original: Song;
+  /** 스냅·클램프된 결과 값. */
   value: number;
 }
 
@@ -156,7 +159,7 @@ export interface UseClipDragOptions {
   editable: boolean;
   /** 이동·길이 드래그가 임계값을 넘어 시작될 때(선택하고 팝오버를 닫는다). */
   onDragStart(clipId: string): void;
-  /** 클릭(임계값 안에서 놓음, 또는 키보드). `button`은 누른 클립 버튼(팝오버의 앵커). */
+  /** 클릭(임계값 안에서 놓음, 또는 키보드). `button`은 누른 클립 본문 버튼(팝오버의 앵커). */
   onClick(clipId: string, button: HTMLElement): void;
   /** 놓을 때 한 번, 미리보기가 원본과 다를 때만. `start`는 미리보기에서 본 그 값이다. */
   onMove(clipId: string, start: number): void;
@@ -166,11 +169,16 @@ export interface UseClipDragOptions {
 /**
  * 한 트랙의 클립 제스처. 한 번에 제스처 하나만 있다.
  *
- * - 클립 본문: 누르고 5px 안에서 놓으면 클릭(`onClick`), 넘기면 이동 드래그.
- * - 오른쪽 핸들: 5px 넘기면 길이 드래그, 안 넘기고 놓으면 아무 일 없다.
- * - 드래그가 시작되면 포인터를 캡처하고(실패하면 제스처를 버린다) 곡은 건드리지 않은 채
- *   `clips`(미리보기)만 돌려주다가, 놓을 때 **마지막 미리보기 값**으로 커밋을 한 번 부른다.
- * - `pointercancel`·`lostpointercapture`(놓기 없이)·`Esc`·`editable` 거짓이 되면 커밋 없이 취소.
+ * - **누르는 순간 그 요소에 포인터를 캡처한다**(실패하면 제스처를 만들지 않는다). 마우스는
+ *   암묵적 캡처가 없어서, 5px 뒤에 잡으면 8px 핸들이나 클립 가장자리에서 빠르게 끌 때
+ *   포인터가 이미 요소 밖이라 move·up을 못 받는다.
+ * - 클릭인지 드래그인지는 놓을 때 정한다: 본문에서 5px 안에서 놓으면 클릭(`onClick`, 누른
+ *   본문 버튼 기준), 핸들은 아무 일 없다. 5px을 넘으면 그때 드래그가 시작된다(`onDragStart`).
+ * - 드래그 중에는 곡을 건드리지 않고 `clips`(미리보기)만 돌려주다가, 놓을 때 **마지막
+ *   미리보기 값**으로 커밋을 한 번 부른다(원본과 다를 때만).
+ * - 모든 종료 경로는 `activeRef`를 먼저 비운 뒤 캡처를 푼다(뒤따르는 `lostpointercapture`가
+ *   no-op이 되도록). 취소: `pointercancel`·`lostpointercapture`(놓기 없이)·`Esc`·`editable`
+ *   거짓·언마운트·마우스 버튼이 이미 떼어진 move(놓기를 놓친 유령 드래그).
  *
  * 핸들러가 읽는 진실은 ref(같은 틱의 연속 이벤트에도 정확), 렌더용 미리보기는 state다.
  */
@@ -189,10 +197,11 @@ export function useClipDrag({
   // 클릭·드래그 결과는 이미 pointerup이 처리했다.
   const swallowClickRef = useRef(false);
 
+  /** 제스처를 버린다(커밋 없음). ref를 먼저 비우고 캡처를 푼다. */
   const cancel = useCallback(() => {
     const active = activeRef.current;
     activeRef.current = null;
-    if (active?.dragging) releaseCapture(active.target, active.pointerId);
+    if (active) releaseCapture(active.target, active.pointerId);
     setPreview(null);
   }, []);
 
@@ -202,8 +211,18 @@ export function useClipDrag({
     if (editable) return;
     const active = activeRef.current;
     activeRef.current = null;
-    if (active?.dragging) releaseCapture(active.target, active.pointerId);
+    if (active) releaseCapture(active.target, active.pointerId);
   }, [editable]);
+
+  // 언마운트(클립이 사라지는 편집 포함)에서 남은 캡처를 푼다.
+  useEffect(
+    () => () => {
+      const active = activeRef.current;
+      activeRef.current = null;
+      if (active) releaseCapture(active.target, active.pointerId);
+    },
+    [],
+  );
 
   const dragging = preview !== null;
   useEffect(() => {
@@ -220,11 +239,19 @@ export function useClipDrag({
       swallowClickRef.current = false;
       if (!editable || e.button !== 0) return;
       if (!Number.isFinite(e.clientX) || !Number.isFinite(e.clientY)) return;
-      // 캡처한 드래그는 건드리지 않는다. 캡처 전(놓은 자리가 클립 밖이라 up을 못 받은)
-      // 묵은 제스처는 새로 누른 것이 대체한다.
-      if (activeRef.current?.dragging) return;
       const clip = findClip(song, trackId, clipId);
       if (!clip) return;
+      // 다른 포인터의 제스처가 진행 중이면 무시한다. 같은 포인터의 묵은 제스처(up·cancel을
+      // 놓친)는 새로 누른 것이 대체한다.
+      const current = activeRef.current;
+      if (current && current.pointerId !== e.pointerId) return;
+      if (current) cancel();
+      try {
+        e.currentTarget.setPointerCapture(e.pointerId);
+      } catch {
+        // 캡처 없이 시작하면 요소 밖에서 move·up이 끊겨 굳는다. 제스처를 만들지 않는다.
+        return;
+      }
       if (kind === "move") swallowClickRef.current = true;
       const base = kind === "move" ? clip.start : clip.length;
       activeRef.current = {
@@ -235,7 +262,7 @@ export function useClipDrag({
         startY: e.clientY,
         original: song,
         base,
-        value: base,
+        result: base,
         dragging: false,
         target: e.currentTarget,
       };
@@ -243,9 +270,12 @@ export function useClipDrag({
     onPointerMove(e) {
       const active = activeRef.current;
       if (!active || e.pointerId !== active.pointerId) return;
+      // 마우스 버튼이 이미 떼어졌다면 up을 놓친 것이다(창 밖 등). 호버를 드래그로 오인하지 않는다.
+      if (e.pointerType === "mouse" && (e.buttons & 1) === 0) {
+        cancel();
+        return;
+      }
       if (!Number.isFinite(e.clientX) || !Number.isFinite(e.clientY)) return;
-      // 캡처 전에 포인터가 다른 클립 위로 지나가며 보내는 move는 누른 요소의 것이 아니다.
-      if (!active.dragging && e.currentTarget !== active.target) return;
       if (!active.dragging) {
         if (
           !movedPastThreshold(
@@ -255,51 +285,51 @@ export function useClipDrag({
         ) {
           return;
         }
-        try {
-          e.currentTarget.setPointerCapture(e.pointerId);
-        } catch {
-          // 캡처 없이 끌면 요소 밖에서 move·up이 끊겨 굳는다. 제스처를 버린다.
-          activeRef.current = null;
-          return;
-        }
         active.dragging = true;
         onDragStart(active.clipId);
       }
-      const value = active.base + deltaTicks(active.startX, e.clientX);
-      if (value === active.value && preview) return;
-      active.value = value;
+      // 렌더는 스냅·클램프된 결과가 바뀔 때만 다시 한다(픽셀마다 아님).
+      const raw = active.base + deltaTicks(active.startX, e.clientX);
+      const probe = previewSong(
+        {
+          kind: active.kind,
+          clipId: active.clipId,
+          original: active.original,
+          value: raw,
+        },
+        trackId,
+      );
+      const shown = findClip(probe, trackId, active.clipId);
+      const result =
+        shown === undefined
+          ? active.result
+          : active.kind === "move"
+            ? shown.start
+            : shown.length;
+      if (preview && result === active.result) return;
+      active.result = result;
       setPreview({
         kind: active.kind,
         clipId: active.clipId,
         original: active.original,
-        value,
+        value: result,
       });
     },
     onPointerUp(e) {
       const active = activeRef.current;
       if (!active || e.pointerId !== active.pointerId) return;
       activeRef.current = null;
+      releaseCapture(active.target, active.pointerId);
       if (!active.dragging) {
-        if (active.kind === "move") onClick(active.clipId, e.currentTarget);
+        // 클릭은 이 제스처의 본문 버튼으로 푼다(up 이벤트의 요소가 아니라).
+        if (active.kind === "move") onClick(active.clipId, active.target);
         return;
       }
-      releaseCapture(active.target, active.pointerId);
       setPreview(null);
       // 마지막 미리보기 값을 커밋한다 — 사용자가 본 것과 같은 위치·길이.
-      const result = previewSong(
-        {
-          kind: active.kind,
-          clipId: active.clipId,
-          original: active.original,
-          value: active.value,
-        },
-        trackId,
-      );
-      if (result === active.original) return;
-      const clip = findClip(result, trackId, active.clipId);
-      if (!clip) return;
-      if (active.kind === "move") onMove(active.clipId, clip.start);
-      else onResize(active.clipId, clip.length);
+      if (active.result === active.base) return;
+      if (active.kind === "move") onMove(active.clipId, active.result);
+      else onResize(active.clipId, active.result);
     },
     onPointerCancel(e) {
       if (activeRef.current?.pointerId === e.pointerId) cancel();

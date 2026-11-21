@@ -306,9 +306,10 @@ describe("TrackLane 빈 곳 클릭으로 클립 추가", () => {
     expect(h.studio().selection?.trackId).toBe(DRUMS);
   });
 
-  it("클립 위를 누르면 추가하지 않는다(선택과 팝오버만)", () => {
+  it("클립 위를 누르면 추가하지 않는다(선택과 팝오버만) — 눌린 x의 틱은 빈 칸이다", () => {
     const h = renderTracks(gapSong());
-    pointerClick(body("clip-1"), xAt(100));
+    // 레인 계산상 2500틱은 비어 있다(대상이 클립 버튼이라 추가가 없어야 한다).
+    pointerClick(body("clip-1"), xAt(2500));
     expect(clipIds()).toEqual(["clip-1", "clip-2"]);
     expect(h.studio().canUndo).toBe(false);
     expect(h.studio().selection).toEqual({ trackId: PIANO, clipId: "clip-1" });
@@ -373,11 +374,32 @@ describe("TrackLane 빈 곳 클릭으로 클립 추가", () => {
     expect(h.studio().canUndo).toBe(false);
   });
 
-  it("클립에서 눌러 레인 빈 곳에서 놓아도 추가하지 않는다", () => {
+  it("클립에서 눌러 레인 빈 곳에서 놓아도 추가하지 않는다(캡처가 클립으로 보낸다: 클릭)", () => {
     const h = renderTracks(gapSong());
     firePointer(body("clip-1"), "pointerdown", { clientX: xAt(100) });
     firePointer(lane(), "pointerup", { clientX: xAt(2500) });
     expect(h.studio().canUndo).toBe(false);
+    expect(h.studio().selection).toEqual({ trackId: PIANO, clipId: "clip-1" });
+  });
+
+  it("캡처 없이 레인으로 간 up도 클립에서 시작한 누름으로는 추가하지 않는다", () => {
+    const h = renderTracks(gapSong());
+    firePointer(body("clip-1"), "pointerdown", { clientX: xAt(100) });
+    firePointer(lane(), "pointerup", { clientX: xAt(2500), retarget: false });
+    expect(h.studio().canUndo).toBe(false);
+  });
+
+  it("팝오버가 열려 있을 때 빈 곳을 누르면 팝오버만 닫히고 클립은 추가하지 않는다", () => {
+    const h = renderTracks(gapSong());
+    pointerClick(body("clip-1"), xAt(100));
+    expect(dialog()).toBeTruthy();
+    pointerClick(lane(), xAt(2500));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(clipIds()).toEqual(["clip-1", "clip-2"]);
+    expect(h.studio().canUndo).toBe(false);
+    // 닫힌 뒤의 다음 클릭은 추가한다
+    pointerClick(lane(), xAt(2500));
+    expect(clipIds()).toEqual(["clip-1", "clip-3", "clip-2"]);
   });
 
   it("레인의 화면 left가 이미 스크롤을 반영하므로 scrollLeft를 또 더하지 않는다", () => {
@@ -434,7 +456,18 @@ describe("TrackLane 클립 클릭", () => {
     expect(dialog()).toBeTruthy();
     expect(h.studio().canUndo).toBe(false);
     expect(lefts()).toEqual(["0px", "480px"]);
-    // 클릭은 포인터를 캡처하지 않는다
+    // 캡처는 누르는 순간 잡고 놓으면 푼다
+    expect(body("clip-1").hasPointerCapture(1)).toBe(false);
+  });
+
+  it("누르는 순간 그 요소에 캡처를 잡고 놓을 때 푼다(클릭도 같다)", () => {
+    renderTracks(gapSong());
+    const spy = vi.spyOn(HTMLElement.prototype, "setPointerCapture");
+    firePointer(body("clip-1"), "pointerdown", { clientX: xAt(100) });
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy.mock.contexts[0]).toBe(body("clip-1"));
+    expect(body("clip-1").hasPointerCapture(1)).toBe(true);
+    firePointer(body("clip-1"), "pointerup", { clientX: xAt(100) });
     expect(body("clip-1").hasPointerCapture(1)).toBe(false);
   });
 
@@ -534,16 +567,38 @@ describe("TrackLane 이동 드래그", () => {
     expect(clipOf(h, "clip-2").start).toBe(4800);
   });
 
-  it("드래그가 시작되면 포인터를 캡처하고 놓으면 해제한다", () => {
+  it("누르는 순간 포인터를 캡처하고 놓으면 해제한다", () => {
     renderTracks(gapSong());
     firePointer(body("clip-2"), "pointerdown", { clientX: X0 });
-    expect(body("clip-2").hasPointerCapture(1)).toBe(false);
+    expect(body("clip-2").hasPointerCapture(1)).toBe(true);
     firePointer(body("clip-2"), "pointermove", { clientX: X0 - 3 });
-    expect(body("clip-2").hasPointerCapture(1)).toBe(false);
+    expect(body("clip-2").hasPointerCapture(1)).toBe(true);
     firePointer(body("clip-2"), "pointermove", { clientX: X0 - 6 });
     expect(body("clip-2").hasPointerCapture(1)).toBe(true);
     firePointer(body("clip-2"), "pointerup", { clientX: X0 - 6 });
     expect(body("clip-2").hasPointerCapture(1)).toBe(false);
+  });
+
+  it("취소 경로(Esc·pointercancel·lostpointercapture)도 캡처를 푼다", () => {
+    renderTracks(gapSong());
+    const cancels = [
+      () => fireEvent.keyDown(document, { key: "Escape" }),
+      () => firePointer(body("clip-2"), "pointercancel", { clientX: X0 }),
+      () =>
+        fireEvent(
+          body("clip-2"),
+          new PointerEvent("lostpointercapture", {
+            bubbles: true,
+            pointerId: 1,
+          }),
+        ),
+    ];
+    for (const cancel of cancels) {
+      firePointer(body("clip-2"), "pointerdown", { clientX: X0 });
+      firePointer(body("clip-2"), "pointermove", { clientX: X0 - 80 });
+      cancel();
+      expect(body("clip-2").hasPointerCapture(1)).toBe(false);
+    }
   });
 
   it("왼쪽 이웃 끝에서 멈춘다(미리보기도 커밋도 클램프)", () => {
@@ -721,6 +776,150 @@ describe("TrackLane 이동 드래그", () => {
     firePointer(body("clip-2"), "pointerdown", { clientX: 700 });
     firePointer(body("clip-2"), "pointermove", { clientX: 620 });
     firePointer(body("clip-2"), "pointerup", { clientX: 620 });
+    expect(clipOf(h, "clip-2").start).toBe(4800);
+  });
+});
+
+describe("TrackLane 포인터 캡처(브라우저처럼 캡처한 요소가 이벤트를 받는다)", () => {
+  const edge = xAt(1920) - 4;
+
+  it("핸들을 누르고 5px 넘게 끌어 포인터가 핸들 밖(레인·이웃)에 있어도 드래그가 이어지고 커밋된다", () => {
+    const h = renderTracks(gapSong());
+    const spy = vi.spyOn(HTMLElement.prototype, "setPointerCapture");
+    firePointer(handle("clip-1"), "pointerdown", { clientX: edge });
+    // 캡처는 누르는 순간 핸들 요소에 요청됐다
+    expect(spy.mock.contexts).toEqual([handle("clip-1")]);
+    expect(handle("clip-1").hasPointerCapture(1)).toBe(true);
+    // 포인터는 이미 핸들 밖: 이벤트는 레인·이웃 클립 위로 나가지만 캡처한 핸들이 받는다
+    firePointer(lane(), "pointermove", { clientX: edge + 80 });
+    expect(tile("clip-1").style.width).toBe("240px");
+    expect(h.studio().canUndo).toBe(false);
+    firePointer(body("clip-2"), "pointerup", { clientX: edge + 80 });
+    expect(clipOf(h, "clip-1").length).toBe(2880);
+    expect(handle("clip-1").hasPointerCapture(1)).toBe(false);
+  });
+
+  it("본문을 누르고 빠르게 끌어 클립 밖으로 나가도 이동이 이어지고 커밋된다", () => {
+    const h = renderTracks(gapSong());
+    const x = xAt(1900); // 클립 오른쪽 가장자리 안쪽
+    firePointer(body("clip-1"), "pointerdown", { clientX: x });
+    firePointer(lane(), "pointermove", { clientX: x + 100 });
+    expect(tile("clip-1").style.left).not.toBe("0px");
+    firePointer(lane(), "pointerup", { clientX: x + 100 });
+    expect(clipOf(h, "clip-1").start).toBeGreaterThan(0);
+  });
+
+  it("캡처 없이 다른 요소로 간 이벤트는 레인 배경이 처리하지 않는다(핸들러 없음)", () => {
+    renderTracks(gapSong());
+    firePointer(handle("clip-1"), "pointerdown", { clientX: edge });
+    firePointer(lane(), "pointermove", { clientX: edge + 80, retarget: false });
+    expect(tile("clip-1").style.width).toBe("160px");
+    firePointer(handle("clip-1"), "pointercancel", { clientX: edge });
+  });
+
+  it("본문에서 누르고 5px 안에서 이웃 클립에서 놓아도(캡처 없는 전달) 누른 클립의 클릭으로 풀린다", () => {
+    const h = renderTracks(gapSong());
+    const rect = (left: number) =>
+      ({ left, right: left + 100, top: 60, bottom: 100 }) as DOMRect;
+    body("clip-1").getBoundingClientRect = () => rect(200);
+    body("clip-2").getBoundingClientRect = () => rect(700);
+    firePointer(body("clip-1"), "pointerdown", { clientX: xAt(100) });
+    firePointer(body("clip-2"), "pointerup", {
+      clientX: xAt(100),
+      retarget: false,
+    });
+    expect(h.studio().selection).toEqual({ trackId: PIANO, clipId: "clip-1" });
+    // 팝오버는 눌린 클립(clip-1)의 본문 버튼 기준이다: 이웃(700)이 아니라 200
+    expect(inDialog("블록 코드").getAttribute("aria-pressed")).toBe("true");
+    expect(dialog().style.left).toBe("200px");
+    expect(body("clip-1").getAttribute("aria-expanded")).toBe("true");
+    expect(body("clip-2").getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("핸들에서 누르고 놓아도(움직임 없음) 팝오버·선택이 생기지 않는다", () => {
+    const h = renderTracks(gapSong());
+    firePointer(handle("clip-1"), "pointerdown", { clientX: edge });
+    firePointer(handle("clip-1"), "pointerup", { clientX: edge });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(h.studio().selection).toBeNull();
+  });
+});
+
+describe("TrackLane 유령 드래그(up을 놓친 경우)", () => {
+  const X0 = xAt(5760) + 20;
+
+  it("lostpointercapture만 오고 up이 없으면 취소되고, 이후 호버(버튼 없음)는 드래그를 시작하지 않으며 다음 누름은 동작한다", () => {
+    const h = renderTracks(gapSong());
+    firePointer(body("clip-2"), "pointerdown", { clientX: X0 });
+    fireEvent(
+      body("clip-2"),
+      new PointerEvent("lostpointercapture", { bubbles: true, pointerId: 1 }),
+    );
+    firePointer(body("clip-2"), "pointermove", {
+      clientX: X0 - 80,
+      buttons: 0,
+    });
+    expect(tile("clip-2").style.left).toBe("480px");
+    expect(h.studio().canUndo).toBe(false);
+    // 다음 누름은 정상
+    firePointer(body("clip-2"), "pointerdown", { clientX: X0 });
+    firePointer(body("clip-2"), "pointermove", { clientX: X0 - 80 });
+    firePointer(body("clip-2"), "pointerup", { clientX: X0 - 80 });
+    expect(clipOf(h, "clip-2").start).toBe(4800);
+  });
+
+  it("누른 뒤 버튼이 이미 떼어진 move(호버)는 드래그를 시작하지 않는다", () => {
+    const h = renderTracks(gapSong());
+    firePointer(body("clip-2"), "pointerdown", { clientX: X0 });
+    firePointer(body("clip-2"), "pointermove", {
+      clientX: X0 - 80,
+      buttons: 0,
+    });
+    expect(tile("clip-2").style.left).toBe("480px");
+    expect(h.studio().selection).toBeNull();
+    firePointer(body("clip-2"), "pointerup", { clientX: X0 - 80 });
+    expect(h.studio().canUndo).toBe(false);
+  });
+
+  it("드래그 중 버튼이 떼어진 move가 오면 커밋 없이 취소한다(마우스만)", () => {
+    const h = renderTracks(gapSong());
+    firePointer(body("clip-2"), "pointerdown", { clientX: X0 });
+    firePointer(body("clip-2"), "pointermove", { clientX: X0 - 80 });
+    expect(tile("clip-2").style.left).toBe("400px");
+    firePointer(body("clip-2"), "pointermove", {
+      clientX: X0 - 160,
+      buttons: 0,
+    });
+    expect(tile("clip-2").style.left).toBe("480px");
+    expect(body("clip-2").hasPointerCapture(1)).toBe(false);
+    firePointer(body("clip-2"), "pointerup", { clientX: X0 - 160 });
+    expect(h.studio().canUndo).toBe(false);
+  });
+
+  it("터치·펜은 buttons 값이 달라도 이 가드로 취소되지 않는다", () => {
+    const h = renderTracks(gapSong());
+    firePointer(body("clip-2"), "pointerdown", {
+      clientX: X0,
+      pointerType: "touch",
+    });
+    firePointer(body("clip-2"), "pointermove", {
+      clientX: X0 - 80,
+      buttons: 0,
+      pointerType: "touch",
+    });
+    firePointer(body("clip-2"), "pointerup", {
+      clientX: X0 - 80,
+      pointerType: "touch",
+    });
+    expect(clipOf(h, "clip-2").start).toBe(4800);
+  });
+
+  it("up을 놓친 뒤(캡처 없는 유실) 같은 포인터의 새 pointerdown이 묵은 제스처를 대체한다", () => {
+    const h = renderTracks(gapSong());
+    firePointer(body("clip-2"), "pointerdown", { clientX: X0 });
+    firePointer(body("clip-2"), "pointerdown", { clientX: X0 });
+    firePointer(body("clip-2"), "pointermove", { clientX: X0 - 80 });
+    firePointer(body("clip-2"), "pointerup", { clientX: X0 - 80 });
     expect(clipOf(h, "clip-2").start).toBe(4800);
   });
 });
@@ -951,6 +1150,7 @@ describe("TrackLane 패턴 팝오버", () => {
     expect(dialog()).toBeTruthy();
     firePointer(body("clip-1"), "pointerdown", { clientX: 5 });
     expect(dialog()).toBeTruthy();
+    firePointer(body("clip-1"), "pointercancel", { clientX: 5 });
     firePointer(document.body, "pointerdown", { clientX: 5 });
     expect(screen.queryByRole("dialog")).toBeNull();
   });
@@ -1022,15 +1222,44 @@ describe("TrackLane 삭제 버튼", () => {
     expect(h.studio().selection).toBeNull();
   });
 
-  it("삭제 버튼을 눌러도 레인에 클립이 추가되지 않는다", () => {
+  it("삭제 버튼을 눌러도 레인에 클립이 추가되지 않는다(눌린 x의 틱은 빈 칸)", () => {
     const h = renderTracks(gapSong());
     pointerClick(body("clip-1"), xAt(100));
+    // 열린 팝오버가 있으면 빈 곳 누름이 어차피 무시되므로 먼저 닫는다.
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
     const del = screen.getByRole("button", { name: "클립 삭제" });
-    firePointer(del, "pointerdown", { clientX: xAt(1800) });
-    firePointer(del, "pointerup", { clientX: xAt(1800) });
+    // 레인 계산상 2500틱은 비어 있다. 대상이 ×라서 추가가 없어야 한다.
+    firePointer(del, "pointerdown", { clientX: xAt(2500) });
+    firePointer(del, "pointerup", { clientX: xAt(2500) });
+    expect(clipIds()).toEqual(["clip-1", "clip-2"]);
+    expect(h.studio().canUndo).toBe(false);
     fireEvent.click(del);
     expect(clipIds()).toEqual(["clip-2"]);
     expect(h.studio().song.tracks[0].clips).toHaveLength(1);
+  });
+
+  it("지우면 다음 클립 본문으로, 마지막이면 이전 클립으로 포커스가 간다", () => {
+    renderTracks(mixedSong());
+    pointerClick(body("clip-1"), xAt(100));
+    fireEvent.click(screen.getByRole("button", { name: "클립 삭제" }));
+    expect(clipIds()).toEqual(["clip-2", "clip-3"]);
+    expect(document.activeElement).toBe(body("clip-2"));
+
+    pointerClick(body("clip-3"), xAt(3900));
+    fireEvent.click(screen.getByRole("button", { name: "클립 삭제" }));
+    expect(clipIds()).toEqual(["clip-2"]);
+    expect(document.activeElement).toBe(body("clip-2"));
+  });
+
+  it("마지막 하나를 지워도 던지지 않는다", () => {
+    const h = renderTracks(gapSong());
+    pointerClick(body("drum-1"), xAt(100));
+    fireEvent.click(
+      within(tile("drum-1")).getByRole("button", { name: "클립 삭제" }),
+    );
+    expect(clipIds(DRUMS)).toEqual([]);
+    expect(h.studio().selection).toBeNull();
   });
 });
 
@@ -1122,6 +1351,28 @@ describe("TrackLane 렌더 비용", () => {
     });
     expect(h.studio().position).not.toEqual(pos);
     expect(onViewRender.mock.calls.length).toBe(before);
+  });
+
+  it("같은 스냅 결과 안에서 픽셀만 움직이면 레인을 다시 그리지 않는다", () => {
+    const onViewRender = vi.fn();
+    const h = renderWithStudio(
+      <TrackLane trackId={PIANO} onViewRender={onViewRender} />,
+      { stored: { [AUTOSAVE_KEY]: serializeSong(gapSong()) } },
+    );
+    expect(h.studio().song.tracks[0].clips).toHaveLength(2);
+    const x0 = xAt(5760) + 20;
+    firePointer(body("clip-2"), "pointerdown", { clientX: x0 });
+    firePointer(body("clip-2"), "pointermove", { clientX: x0 - 6 }); // 시작
+    const before = onViewRender.mock.calls.length;
+    // -7..-30px = -84..-360틱: 모두 5760 -> 스냅 5760(반마디 격자의 같은 칸)
+    for (const dx of [7, 12, 20, 30]) {
+      firePointer(body("clip-2"), "pointermove", { clientX: x0 - dx });
+    }
+    expect(onViewRender.mock.calls.length).toBe(before);
+    // 칸이 바뀌면 다시 그린다
+    firePointer(body("clip-2"), "pointermove", { clientX: x0 - 80 });
+    expect(onViewRender.mock.calls.length).toBe(before + 1);
+    firePointer(body("clip-2"), "pointerup", { clientX: x0 - 80 });
   });
 
   it("다른 트랙의 클립을 선택해도 이 레인은 다시 렌더되지 않는다", () => {

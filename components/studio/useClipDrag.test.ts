@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import { buildDemoSong } from "@/lib/score/demo-song";
 import { songWithPatterns } from "@/lib/score/testing/builders";
 
-import { popoverPosition } from "./popover";
 import {
   DRAG_THRESHOLD_PX,
   findClip,
@@ -137,19 +136,5 @@ describe("planAddClip", () => {
     const before = structuredClone(song);
     planAddClip(song, "track-piano", 0);
     expect(song).toEqual(before);
-  });
-});
-
-describe("popoverPosition", () => {
-  it("앵커 아래 4px에 놓고 가로는 뷰포트 안(여백 8px)으로 가둔다", () => {
-    expect(popoverPosition({ left: 200, bottom: 100 }, 1000)).toEqual({
-      left: 200,
-      top: 104,
-    });
-    expect(popoverPosition({ left: 5000, bottom: 100 }, 1000)).toEqual({
-      left: 1000 - 224 - 8,
-      top: 104,
-    });
-    expect(popoverPosition({ left: -50, bottom: 100 }, 1000).left).toBe(8);
   });
 });

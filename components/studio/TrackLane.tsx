@@ -139,6 +139,9 @@ const TrackLaneView = memo(function TrackLaneView({
   // 대상이 레인이 아니라서 여기서 걸러진다.
   const onLaneDown = (e: ReactPointerEvent<HTMLElement>) => {
     pendingAddRef.current = null;
+    // 팝오버가 열려 있으면 이 누름은 팝오버를 닫는 것이지 클립을 추가하는 게 아니다
+    // (닫기는 document 리스너가 하고, React 핸들러가 먼저 오므로 `open`은 아직 값이 있다).
+    if (open) return;
     if (!editable || e.button !== 0 || e.target !== e.currentTarget) return;
     if (!Number.isFinite(e.clientY)) return;
     const lane = laneRef.current;
@@ -155,6 +158,16 @@ const TrackLaneView = memo(function TrackLaneView({
       y: e.clientY,
       tick,
     };
+  };
+  // 지운 클립 다음(없으면 이전) 클립 본문으로 포커스를 옮겨 키보드 포커스를 잃지 않게 한다.
+  const deleteClip = (clipId: string) => {
+    const clipsNow = track.clips;
+    const at = clipsNow.findIndex((c) => c.id === clipId);
+    const neighbour = clipsNow[at + 1] ?? clipsNow[at - 1];
+    if (neighbour) {
+      buttonRefs.current.get(neighbour.id)?.focus({ preventScroll: true });
+    }
+    edit.removeClip(trackId, clipId);
   };
   const onLaneUp = (e: ReactPointerEvent<HTMLElement>) => {
     const pending = pendingAddRef.current;
@@ -198,7 +211,7 @@ const TrackLaneView = memo(function TrackLaneView({
             if (el) buttonRefs.current.set(clip.id, el);
             else buttonRefs.current.delete(clip.id);
           }}
-          onDelete={() => edit.removeClip(trackId, clip.id)}
+          onDelete={() => deleteClip(clip.id)}
         />
       ))}
       {open && openPattern !== null && (
