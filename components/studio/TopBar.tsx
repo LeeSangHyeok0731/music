@@ -108,37 +108,40 @@ export function TopBar() {
         </div>
       </div>
 
-      {!supported && (
-        <p role="alert" className="px-3 pb-2 text-amber-400">
-          이 브라우저는 Web Audio를 지원하지 않습니다.
-        </p>
-      )}
-      {playing && (
-        <p role="status" className="px-3 pb-2 text-zinc-400">
-          재생 중에는 편집할 수 없습니다
-        </p>
-      )}
-      {pending && (
-        <p role="status" className="px-3 pb-2 text-zinc-400">
-          샘플을 불러오는 중…
-        </p>
-      )}
-      {message && (
-        <p
-          role="alert"
-          className="flex items-center gap-2 px-3 pb-2 text-amber-400"
-        >
-          <span>{message}</span>
-          <button
-            type="button"
-            aria-label="메시지 닫기"
-            onClick={dismissMessage}
-            className="rounded px-1.5 text-zinc-400 hover:bg-white/10"
-          >
-            ×
-          </button>
-        </p>
-      )}
+      {/* 안내가 나타나고 사라져도 본문이 밀리지 않게 한 줄 높이를 항상 비워 둔다. */}
+      <div
+        data-testid="message-strip"
+        className="flex min-h-7 flex-wrap items-center gap-x-4 px-3 pb-2"
+      >
+        {!supported && (
+          <p role="alert" className="text-amber-400">
+            이 브라우저는 Web Audio를 지원하지 않습니다.
+          </p>
+        )}
+        {playing && (
+          <p role="status" className="text-zinc-400">
+            재생 중에는 편집할 수 없습니다
+          </p>
+        )}
+        {pending && (
+          <p role="status" className="text-zinc-400">
+            샘플을 불러오는 중…
+          </p>
+        )}
+        {message && (
+          <p role="alert" className="flex items-center gap-2 text-amber-400">
+            <span>{message}</span>
+            <button
+              type="button"
+              aria-label="메시지 닫기"
+              onClick={dismissMessage}
+              className="rounded px-1.5 text-zinc-400 hover:bg-white/10"
+            >
+              ×
+            </button>
+          </p>
+        )}
+      </div>
     </header>
   );
 }

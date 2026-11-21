@@ -295,3 +295,57 @@ describe("TopBar 메시지 줄", () => {
     expect(screen.queryByRole("alert")).toBeNull();
   });
 });
+
+describe("TopBar 안내 줄 자리 예약", () => {
+  // jsdom은 레이아웃을 못 하므로 예약 높이 클래스를 고정한다. 안내가 나타나고 사라져도
+  // 줄 높이가 같아야 본문이 밀리지 않는다.
+  const strip = () => screen.getByTestId("message-strip");
+  const RESERVED = /(^|\s)min-h-7(\s|$)/;
+
+  it("아무 안내도 없을 때 줄은 비어 있어도 높이를 예약한다", () => {
+    renderWithStudio(<TopBar />);
+    expect(strip().className).toMatch(RESERVED);
+    expect(strip().textContent).toBe("");
+    expect(within(strip()).queryByRole("alert")).toBeNull();
+    expect(within(strip()).queryByRole("status")).toBeNull();
+  });
+
+  it("재생 중 안내(role=status)가 같은 줄 안에 들어오고 예약 높이는 그대로다", async () => {
+    renderWithStudio(<TopBar />);
+    await clickPlay();
+    const s = strip();
+    expect(s.className).toMatch(RESERVED);
+    expect(within(s).getByRole("status").textContent).toBe(
+      "재생 중에는 편집할 수 없습니다",
+    );
+  });
+
+  it("샘플 대기 안내도 같은 줄 안에서 예약 높이를 유지한다", async () => {
+    renderWithStudio(<TopBar />, { playMode: "manual" });
+    await clickPlay();
+    expect(strip().className).toMatch(RESERVED);
+    expect(within(strip()).getByRole("status").textContent).toBe(
+      "샘플을 불러오는 중…",
+    );
+  });
+
+  it("메시지(role=alert)가 떠도 예약 높이는 그대로이고 닫으면 줄이 비어도 유지된다", async () => {
+    renderWithStudio(<TopBar />, { playMode: { reject: new Error("boom") } });
+    await clickPlay();
+    const s = strip();
+    expect(s.className).toMatch(RESERVED);
+    const alert = within(s).getByRole("alert");
+    fireEvent.click(within(alert).getByRole("button", { name: "메시지 닫기" }));
+    expect(within(s).queryByRole("alert")).toBeNull();
+    expect(s.className).toMatch(RESERVED);
+  });
+
+  it("Web Audio 경고(role=alert)도 같은 줄 안에 있다", () => {
+    removeAudioContextStub();
+    renderWithStudio(<TopBar />);
+    expect(within(strip()).getByRole("alert").textContent).toContain(
+      "Web Audio를 지원하지 않습니다",
+    );
+    expect(strip().className).toMatch(RESERVED);
+  });
+});
