@@ -20,7 +20,7 @@ lib/score/  곡 데이터. Web Audio도 React도 import하지 않는다. 브라�
 lib/audio/  엔진. React를 import하지 않는다. AudioContext와 재생 상태를 소유한다.
 ```
 
-UI는 명령형 메서드로만 엔진을 건드린다 (`play()`, `stop()`, `seek()`, `setTempo()`). 엔진은 리렌더를 일으키지 않는다.
+UI는 명령형 메서드로만 엔진을 건드린다 (`play()`, `stop()`, `setSong()`, `setTempo()`, `setMetronome()` — `seek()`은 아직 없다). 엔진은 리렌더를 일으키지 않는다.
 
 ## AudioContext
 
@@ -58,7 +58,7 @@ UI는 명령형 메서드로만 엔진을 건드린다 (`play()`, `stop()`, `see
 - 정리 경로를 반드시 만든다: `stop(when)` 예약 + `onended`에서 `disconnect()`. 없으면 긴 곡에서 노드가 쌓여 샌다.
 - 엔벨로프는 `setValueAtTime` / `linearRampToValueAtTime` / `exponentialRampToValueAtTime`로 예약한다. **`exponentialRampToValueAtTime`의 목표값은 0이 될 수 없다** — 작은 양수 뒤 `setValueAtTime(0, ...)`.
 - 동시 발음 상한을 두고, 초과 시 가장 오래된 보이스를 페이드아웃해 훔친다.
-- 마스터 게인 스테이지를 둔다. 악기 5종이 겹치면 합산 진폭이 1.0을 쉽게 넘어 클리핑한다.
+- 마스터 게인 스테이지를 둔다. 악기 4종이 겹치면 합산 진폭이 1.0을 쉽게 넘어 클리핑한다.
 
 ## 악기
 

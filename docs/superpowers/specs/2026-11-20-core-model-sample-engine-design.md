@@ -38,6 +38,12 @@ Bandline을 "음악 비전공자의 아이디어 스케치 도구"로 다시 잡
 
 ## 3. 곡 데이터 모델 (`lib/score/`)
 
+> **이 절의 모델은 v3로 대체됐다**(`2026-11-21-arrangement-editor-design.md` 3절). 아래는 v2 기준의 원문이고 고치지 않았다. 바뀐 것:
+> - 코드 진행(`progression: ChordSegment[]`)을 곡이 소유한다. 곡 전체를 빈틈·겹침 없이 덮는다.
+> - 클립 본문 `ChordBody { type: "chord", chord, pattern }`는 `PatternBody { type: "pattern", pattern }`가 됐다(코드 필드 없음). `NotesBody`는 그대로다.
+> - `SONG_VERSION = 3`. v2는 거부하며 마이그레이션하지 않는다. 불변식에 진행 검사(`progression-invalid`)와 코드 값 검사(`invalid-chord`)가 더해졌다.
+> - `expandSong(song)`의 시그니처는 그대로이고, 각 스텝의 코드를 그 스텝의 절대 시각으로 진행에서 찾는다. `bakeClip`·`clipNotes`는 곡의 진행을 인자로 추가로 받는다.
+
 순수 TS. Web Audio도 React도 import하지 않는다. 브라우저 없이 전부 검증할 수 있어야 한다.
 
 ### 3.1 타입

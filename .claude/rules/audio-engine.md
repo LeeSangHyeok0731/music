@@ -4,7 +4,7 @@ paths:
   - 'lib/audio/**/*'
   - 'lib/score/**/*'
   - 'state/**/*'
-  - 'components/editor/**/*'
+  - 'components/studio/**/*'
   - '.claude/skills/audio-engine/**/*'
 ---
 
@@ -51,7 +51,7 @@ look-ahead 스케줄러 패턴을 쓴다 (Chris Wilson, *A Tale of Two Clocks*):
 - 만든 노드는 반드시 정리한다. `stop(when)` 예약 + `onended`에서 `disconnect()`. 이걸 빼먹으면 긴 곡에서 노드가 수천 개 쌓여 메모리와 CPU가 샌다.
 - 엔벨로프는 `setValueAtTime` / `linearRampToValueAtTime` / `exponentialRampToValueAtTime`으로 예약한다. **`exponentialRampToValueAtTime`의 목표값은 0이 될 수 없다** (예외 발생) — `0.0001` 같은 작은 값을 쓰고 그 뒤에 `setValueAtTime(0, ...)`.
 - 동시 발음 수(polyphony)에 상한을 둔다. 드럼 연타나 코드 스트로크에서 보이스가 무제한으로 늘면 클리핑과 CPU 스파이크가 난다. 상한 초과 시 가장 오래된 보이스를 페이드아웃시켜 훔친다(voice stealing).
-- 마스터 출력 앞에 게인 스테이지를 둔다. 악기 5종이 동시에 울리면 합산 진폭이 1.0을 쉽게 넘어 디지털 클리핑이 난다.
+- 마스터 출력 앞에 게인 스테이지를 둔다. 악기 4종이 동시에 울리면 합산 진폭이 1.0을 쉽게 넘어 디지털 클리핑이 난다.
 
 ## AudioWorklet
 
@@ -76,5 +76,5 @@ look-ahead 스케줄러 패턴을 쓴다 (Chris Wilson, *A Tale of Two Clocks*):
 
 - 타입 검사와 빌드는 소리에 대해 아무것도 증명하지 않는다. `pnpm dev`로 실제로 들어본다.
 - 리듬 정확도는 눈이 아니라 귀로 확인한다. 메트로놈과 함께 30초 이상 재생해 드리프트가 없는지 본다.
-- 악기를 5종 다 올리고 동시 발음이 많은 구간에서 끊김이 없는지 본다.
+- 악기를 4종 다 올리고 동시 발음이 많은 구간에서 끊김이 없는지 본다.
 - 순수 로직(`lib/score/`의 시간 변환, 스케줄러의 구간 선택, `lib/audio/testing/`의 가짜 Web Audio로 도는 샘플 뱅크·엔진 경합 로직)은 `pnpm test`(vitest)가 덮는다. 이쪽 버그는 회귀 테스트를 쓰거나 늘린다. 소리 자체는 테스트로 검증되지 않으므로 반드시 들어본다.
