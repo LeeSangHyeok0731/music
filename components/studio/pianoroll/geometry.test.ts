@@ -9,6 +9,7 @@ import {
   ROLL_CHORD_STRIP_HEIGHT,
   ROLL_PX_PER_BEAT,
   ROW_HEIGHT,
+  VELOCITY_LANE_HEIGHT,
   chordSegmentsInClip,
   chordToneRows,
   gridBackground,
@@ -20,6 +21,7 @@ import {
   pitchToY,
   rollTickToX,
   rollXToTick,
+  velocityFromY,
   yToPitch,
 } from "./geometry";
 
@@ -272,5 +274,36 @@ describe("initialScrollTop", () => {
     expect(initialScrollTop([], 96, Number.NaN)).toBe(
       initialScrollTop([], 96, 0),
     );
+  });
+});
+
+describe("velocityFromY", () => {
+  const H = VELOCITY_LANE_HEIGHT;
+
+  it("레인 높이는 80px", () => {
+    expect(H).toBe(80);
+  });
+
+  it("레인 위쪽(y 0)은 1, 아래쪽(y 높이)은 0.05, 가운데(y 40)는 0.5", () => {
+    expect(velocityFromY(0, H)).toBe(1);
+    expect(velocityFromY(H, H)).toBe(0.05);
+    expect(velocityFromY(40, H)).toBe(0.5);
+  });
+
+  it("레인 밖은 클램프한다(위 -10 → 1, 아래 90 → 0.05)", () => {
+    expect(velocityFromY(-10, H)).toBe(1);
+    expect(velocityFromY(90, H)).toBe(0.05);
+  });
+
+  it("반올림하지 않는다(y 7 → 1 − 7/80)", () => {
+    expect(velocityFromY(7, H)).toBe(1 - 7 / 80);
+  });
+
+  it("비유한 y·높이와 0 이하 높이는 null", () => {
+    expect(velocityFromY(Number.NaN, H)).toBeNull();
+    expect(velocityFromY(Infinity, H)).toBeNull();
+    expect(velocityFromY(10, Number.NaN)).toBeNull();
+    expect(velocityFromY(10, 0)).toBeNull();
+    expect(velocityFromY(10, -80)).toBeNull();
   });
 });

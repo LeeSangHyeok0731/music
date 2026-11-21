@@ -32,6 +32,7 @@ import {
 } from "./geometry";
 import { useFocusTrap } from "./useFocusTrap";
 import { liveSelection, useNoteGestures } from "./useNoteGestures";
+import { useNoteKeys } from "./useNoteKeys";
 
 export interface PianoRollProps {
   trackId: string;
@@ -74,7 +75,9 @@ function clipBodyButton(clipId: string): HTMLElement | null {
  *   첫 포커스를 닫기 버튼에 두지 않는 건, 키보드로 연 직후 Space(재생)가 포커스된 버튼의 클릭이 되어
  *   모달을 닫아 버리기 때문이다.
  * - 재생 중·재생 대기 중에도 열려 있고(헤더에 알림), 편집만 막힌다.
- * - 스크롤은 격자 영역 하나가 소유한다(가로·세로). 건반 열·코드 띠는 그 안의 `sticky`다.
+ * - 스크롤은 격자 영역 하나가 소유한다(가로·세로). 건반 열·코드 띠·세기 레인은 그 안의 `sticky`다
+ *   (세기 레인은 아래쪽에 붙고, 가로 스크롤은 격자와 저절로 맞는다).
+ * - 키보드 음 편집(`useNoteKeys`)과 세기 레인(`VelocityLane`)이 음 조작을 마저 맡는다.
  * - 렌더 비용: 이 컴포넌트는 `useStudio()` 전체를 읽으므로 10Hz 위치 표본마다 함께 다시 렌더된다
  *   (함수 본문과 헤더). 무거운 자식인 격자(`NoteGrid`)·건반(`KeyColumn`)·코드 띠(`RollChordStrip`)는
  *   `memo`에 안정된 props만 받아 다시 그려지지 않고, 플레이헤드는 rAF로 transform만 쓴다.
@@ -131,6 +134,18 @@ export function PianoRoll({
     selection,
     setSelection,
     edit: edit.notes,
+  });
+
+  useNoteKeys({
+    song,
+    trackId,
+    clipId,
+    editable,
+    unit,
+    selection,
+    setSelection,
+    edit: edit.notes,
+    scrollRef,
   });
 
   useEffect(() => {
@@ -198,9 +213,12 @@ export function PianoRoll({
         data-testid="roll-scroll"
         className="timeline-scroll min-h-0 flex-1 overflow-auto outline-none focus-visible:ring-1 focus-visible:ring-zinc-500 focus-visible:ring-inset"
       >
-        <div style={{ width: KEY_COLUMN_WIDTH + gridWidth }}>
+        <div
+          className="flex min-h-full flex-col"
+          style={{ width: KEY_COLUMN_WIDTH + gridWidth }}
+        >
           <div
-            className="sticky top-0 z-40 flex"
+            className="sticky top-0 z-40 flex shrink-0"
             style={{ height: ROLL_CHORD_STRIP_HEIGHT }}
           >
             <div
@@ -214,7 +232,7 @@ export function PianoRoll({
               onViewRender={onGridRender}
             />
           </div>
-          <div className="flex">
+          <div className="flex shrink-0">
             <KeyColumn lo={range.lo} hi={range.hi} />
             <div
               className="relative shrink-0"
@@ -244,9 +262,18 @@ export function PianoRoll({
               />
             </div>
           </div>
+          <VelocityLane
+            trackId={trackId}
+            clipId={clipId}
+            clip={clip}
+            instrument={instrument}
+            selection={selection}
+            editable={editable}
+            edit={edit.notes}
+            width={gridWidth}
+          />
         </div>
       </div>
-      <VelocityLane />
     </div>,
     document.body,
   );

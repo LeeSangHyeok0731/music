@@ -12,6 +12,7 @@
 import { ROOT_NAMES, chordPitchClasses } from "@/lib/score/chords";
 import {
   GRID_UNITS,
+  MIN_VELOCITY,
   type GridUnit,
 } from "@/lib/score/notes";
 import { PPQ, type Chord, type Clip, type Note, type Song } from "@/lib/score/model";
@@ -21,8 +22,10 @@ export const ROW_HEIGHT = 20;
 export const KEY_COLUMN_WIDTH = 56;
 /** 격자 위 코드 띠 높이(px). */
 export const ROLL_CHORD_STRIP_HEIGHT = 24;
-/** 아래 세기 레인 높이(px). Task 5가 채운다. */
-export const VELOCITY_LANE_HEIGHT = 72;
+/** 아래 세기 레인 높이(px). 막대 높이 = 세기 × 이 값. */
+export const VELOCITY_LANE_HEIGHT = 80;
+/** 세기 막대 하나의 폭(px). 음의 시작 x에 놓인다. */
+export const VELOCITY_BAR_WIDTH = 8;
 
 /** 틱 → 격자 안의 x(px). 곱셈을 먼저 해서 부동소수 오차를 피한다. */
 export function rollTickToX(tick: number): number {
@@ -56,6 +59,17 @@ export function noteName(pitch: number): string {
 
 export function isBlackKey(pitch: number): boolean {
   return BLACK_KEY_CLASSES.has(((pitch % 12) + 12) % 12);
+}
+
+/**
+ * 세기 레인 안의 y(px, 레인 위 = 0) → 세기. `1 − y/높이`를 `[MIN_VELOCITY, 1]`로 클램프하고
+ * 반올림하지 않는다. 레인 밖 y는 그대로 클램프된다. 비유한 값이나 높이가 0 이하면 null.
+ */
+export function velocityFromY(y: number, laneHeight: number): number | null {
+  if (!Number.isFinite(y) || !Number.isFinite(laneHeight) || laneHeight <= 0) {
+    return null;
+  }
+  return Math.min(Math.max(1 - y / laneHeight, MIN_VELOCITY), 1);
 }
 
 /** 음 하나의 격자 안 사각형(px). */
