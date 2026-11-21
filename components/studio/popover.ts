@@ -22,6 +22,19 @@ export function popoverPosition(
   };
 }
 
+/**
+ * 지금 열려 있는(마운트된) 팝오버 수. 닫기 리스너는 `document`에 있어서 React의 루트
+ * 핸들러(레인의 pointerdown)보다 **나중에** 돈다 — 그래서 레인이 "이 누름은 팝오버를
+ * 닫는 것"임을 알려면 이 값을 동기적으로 읽는다. 레인마다 자기 팝오버만 알면 다른 레인의
+ * 팝오버를 닫는 클릭이 이 레인에 클립을 추가해 버린다.
+ */
+let openPopoverCount = 0;
+
+/** 어느 레인이든 팝오버가 열려 있는가(`usePopoverDismiss`가 마운트 동안 센다). */
+export function hasOpenPopover(): boolean {
+  return openPopoverCount > 0;
+}
+
 export interface UsePopoverDismissOptions {
   /** 팝오버를 연 버튼. 바깥 누르기 판정에서 제외한다(그 버튼의 클릭이 토글한다). */
   anchor: HTMLElement;
@@ -46,6 +59,13 @@ export function usePopoverDismiss({
   useEffect(() => {
     closeRef.current = onClose;
   });
+
+  useEffect(() => {
+    openPopoverCount++;
+    return () => {
+      openPopoverCount--;
+    };
+  }, []);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {

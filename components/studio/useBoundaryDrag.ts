@@ -141,6 +141,9 @@ export function useBoundaryDrag({
 
   const bind = (index: number): BoundaryHandleProps => ({
     onPointerDown(e) {
+      // 캡처한 핸들이 사라졌다면(합치기·실행취소 등) lostpointercapture가 document로 가서
+      // React가 못 받는다. 묵은 드래그는 버리고 새 누름을 받는다.
+      if (activeRef.current && !activeRef.current.target.isConnected) cancel();
       if (!editable || e.button !== 0 || activeRef.current) return;
       if (tickOf(e) === null) return;
       const original = song;

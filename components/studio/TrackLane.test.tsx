@@ -14,6 +14,7 @@ import { patternLabel } from "@/lib/score/pattern-labels";
 import { patternsFor } from "@/lib/score/patterns";
 import { songWithPatterns } from "@/lib/score/testing/builders";
 
+import { ChordLane } from "./ChordLane";
 import { Studio } from "./Studio";
 import { TrackLane } from "./TrackLane";
 import {
@@ -788,7 +789,8 @@ describe("TrackLane 포인터 캡처(브라우저처럼 캡처한 요소가 이�
     const spy = vi.spyOn(HTMLElement.prototype, "setPointerCapture");
     firePointer(handle("clip-1"), "pointerdown", { clientX: edge });
     // 캡처는 누르는 순간 핸들 요소에 요청됐다
-    expect(spy.mock.contexts).toEqual([handle("clip-1")]);
+    expect(spy.mock.contexts).toHaveLength(1);
+    expect(spy.mock.contexts[0]).toBe(handle("clip-1"));
     expect(handle("clip-1").hasPointerCapture(1)).toBe(true);
     // 포인터는 이미 핸들 밖: 이벤트는 레인·이웃 클립 위로 나가지만 캡처한 핸들이 받는다
     firePointer(lane(), "pointermove", { clientX: edge + 80 });
@@ -1386,5 +1388,131 @@ describe("TrackLane 렌더 비용", () => {
     const before = onViewRender.mock.calls.length;
     act(() => h.studio().select({ trackId: DRUMS, clipId: "drums-0" }));
     expect(onViewRender.mock.calls.length).toBe(before);
+  });
+});
+
+describe("TrackLane 열린 팝오버를 닫는 클릭은 클립을 추가하지 않는다(레인 사이)", () => {
+  it("한 레인의 팝오버가 열려 있을 때 다른 레인의 빈 곳을 누르면 팝오버만 닫히고 그 레인에 추가하지 않는다", () => {
+    const h = renderTracks(gapSong());
+    pointerClick(body("clip-1"), xAt(100)); // 피아노 레인의 팝오버
+    expect(dialog()).toBeTruthy();
+    pointerClick(lane(DRUMS), xAt(3000)); // 드럼 레인의 빈 곳
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(clipIds(DRUMS)).toEqual(["drum-1"]);
+    expect(h.studio().canUndo).toBe(false);
+  });
+
+  it("코드 팝오버가 열려 있을 때 트랙 레인의 빈 곳을 누르면 팝오버만 닫힌다", () => {
+    const h = renderWithStudio(
+      <>
+        <ChordLane />
+        <TrackLane trackId={PIANO} />
+      </>,
+      { stored: { [AUTOSAVE_KEY]: serializeSong(gapSong()) } },
+    );
+    stubLaneRect(lane(), { left: LANE_LEFT, width: 1280, height: 56 });
+    fireEvent.click(
+      within(screen.getByTestId("chord-lane")).getAllByRole("button")[0],
+    );
+    expect(screen.getByRole("dialog", { name: "코드 선택" })).toBeTruthy();
+    pointerClick(lane(), xAt(2500));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(clipIds()).toEqual(["clip-1", "clip-2"]);
+    expect(h.studio().canUndo).toBe(false);
+  });
+
+  it("팝오버가 닫힌 뒤의 다음 빈 곳 클릭은 정상적으로 추가한다", () => {
+    const h = renderTracks(gapSong());
+    pointerClick(body("clip-1"), xAt(100));
+    pointerClick(lane(DRUMS), xAt(3000)); // 닫기만
+    expect(clipIds(DRUMS)).toEqual(["drum-1"]);
+    pointerClick(lane(DRUMS), xAt(3000));
+    expect(clipIds(DRUMS)).toEqual(["drum-1", "clip-1"]);
+    expect(h.studio().canUndo).toBe(true);
+  });
+
+  it("팝오버가 없으면 빈 곳 클릭이 추가한다(열었다 닫은 팝오버가 상태를 남기지 않는다)", () => {
+    const h = renderTracks(gapSong());
+    pointerClick(lane(DRUMS), xAt(3000));
+    expect(clipIds(DRUMS)).toEqual(["drum-1", "clip-1"]);
+    // (새 드럼 클립도 id가 clip-1이라 피아노 클립은 레인 안에서 찾는다)
+    pointerClick(
+      within(lane()).getByRole("button", { name: "블록 코드" }),
+      xAt(100),
+    );
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    pointerClick(lane(), xAt(2500));
+    expect(clipIds()).toEqual(["clip-1", "clip-3", "clip-2"]);
+    expect(h.studio().canUndo).toBe(true);
+  });
+
+  it("레인이 언마운트되어도 열린 팝오버 수가 새지 않는다(다음 렌더의 추가가 막히지 않는다)", () => {
+    const first = renderTracks(gapSong());
+    pointerClick(body("clip-1"), xAt(100));
+    expect(dialog()).toBeTruthy();
+    first.unmount();
+    cleanup();
+    const h = renderTracks(gapSong());
+    pointerClick(lane(), xAt(2500));
+    expect(h.studio().canUndo).toBe(true);
+  });
+});
+
+describe("TrackLane 제스처 보강(두 번째 포인터·사라진 요소)", () => {
+  const X0 = xAt(5760) + 20;
+
+  it("진행 중인 제스처가 있을 때 다른 포인터의 누름이 끝난 뒤의 click 삼킴을 풀지 않는다", () => {
+    renderTracks(gapSong());
+    firePointer(body("clip-2"), "pointerdown", { clientX: X0 });
+    firePointer(body("clip-2"), "pointermove", { clientX: X0 - 80 });
+    // 두 번째 손가락·버튼: 무시되지만 삼킴 표시를 지우면 안 된다
+    firePointer(body("clip-2"), "pointerdown", { clientX: X0, pointerId: 2 });
+    firePointer(body("clip-2"), "pointerup", { clientX: X0 - 80 });
+    fireEvent.click(body("clip-2"), { detail: 1 });
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("끝난 제스처의 삼킴은 click이 오지 않았어도 다음 누름에서 초기화된다", () => {
+    const h = renderTracks(gapSong());
+    pointerClick(body("clip-1"), xAt(100));
+    fireEvent.keyDown(document, { key: "Escape" });
+    // 이번엔 캡처가 던져 제스처가 안 만들어진다: 이어지는 마우스 click은 클릭으로 처리돼야 한다
+    vi.spyOn(HTMLElement.prototype, "setPointerCapture").mockImplementationOnce(
+      () => {
+        throw new DOMException("no such pointer", "NotFoundError");
+      },
+    );
+    firePointer(body("clip-2"), "pointerdown", { clientX: X0 });
+    fireEvent.click(body("clip-2"), { detail: 1 });
+    expect(h.studio().selection).toEqual({ trackId: PIANO, clipId: "clip-2" });
+  });
+
+  it("캡처한 요소가 DOM에서 사라진 묵은 제스처는 다른 포인터의 새 pointerdown이 대체한다", () => {
+    const h = renderTracks(gapSong());
+    firePointer(body("clip-2"), "pointerdown", { clientX: X0 });
+    // 스펙상 요소가 떨어지면 lostpointercapture가 document로 가서 React가 못 받는다
+    body("clip-2").remove();
+    const x = xAt(100);
+    firePointer(body("clip-1"), "pointerdown", { clientX: x, pointerId: 2 });
+    firePointer(body("clip-1"), "pointermove", {
+      clientX: x + 80,
+      pointerId: 2,
+    });
+    firePointer(body("clip-1"), "pointerup", { clientX: x + 80, pointerId: 2 });
+    expect(clipOf(h, "clip-1").start).toBe(960);
+  });
+
+  it("제스처 중인 클립이 곡에서 사라지면(실행취소·삭제) 제스처를 버린다: 유령 미리보기·커밋 없음", () => {
+    const h = renderTracks(gapSong());
+    firePointer(body("clip-2"), "pointerdown", { clientX: X0 });
+    firePointer(body("clip-2"), "pointermove", { clientX: X0 - 80 });
+    expect(tile("clip-2").style.left).toBe("400px");
+    act(() => h.studio().edit.removeClip(PIANO, "clip-2"));
+    expect(clipIds()).toEqual(["clip-1"]);
+    firePointer(lane(), "pointerup", { clientX: X0 - 80 });
+    expect(clipIds()).toEqual(["clip-1"]);
+    act(() => h.studio().undo());
+    expect(clipOf(h, "clip-2").start).toBe(5760);
   });
 });

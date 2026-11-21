@@ -224,6 +224,12 @@ export function useClipDrag({
     [],
   );
 
+  // 제스처 중인 클립이 곡에서 사라지면(실행취소·삭제) 제스처를 버린다.
+  useEffect(() => {
+    const active = activeRef.current;
+    if (active && !findClip(song, trackId, active.clipId)) cancel();
+  }, [song, trackId, cancel]);
+
   const dragging = preview !== null;
   useEffect(() => {
     if (!dragging) return;
@@ -236,13 +242,18 @@ export function useClipDrag({
 
   const bindGesture = (kind: DragKind, clipId: string): ClipHandleProps => ({
     onPointerDown(e) {
-      swallowClickRef.current = false;
+      // 진행 중인 제스처가 있으면 삼킴 표시를 건드리지 않는다(두 번째 손가락·버튼의 누름이
+      // 첫 제스처 뒤에 오는 click을 풀어 놓으면 안 된다).
+      if (!activeRef.current) swallowClickRef.current = false;
       if (!editable || e.button !== 0) return;
       if (!Number.isFinite(e.clientX) || !Number.isFinite(e.clientY)) return;
       const clip = findClip(song, trackId, clipId);
       if (!clip) return;
       // 다른 포인터의 제스처가 진행 중이면 무시한다. 같은 포인터의 묵은 제스처(up·cancel을
       // 놓친)는 새로 누른 것이 대체한다.
+      // 캡처한 요소가 사라졌다면(실행취소로 클립이 없어지는 등) 스펙상 lostpointercapture가
+      // document로 가서 React가 못 받는다. 그 묵은 제스처는 버리고 새 누름을 받는다.
+      if (activeRef.current && !activeRef.current.target.isConnected) cancel();
       const current = activeRef.current;
       if (current && current.pointerId !== e.pointerId) return;
       if (current) cancel();

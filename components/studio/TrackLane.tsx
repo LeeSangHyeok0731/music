@@ -15,7 +15,7 @@ import { useStudio } from "@/state/useStudio";
 import { ClipBlock } from "./ClipBlock";
 import { PatternPopover } from "./PatternPopover";
 import { ROW_DIVIDER, TRACK_LANE_HEIGHT } from "./layout";
-import { popoverPosition } from "./popover";
+import { hasOpenPopover, popoverPosition } from "./popover";
 import {
   findClip,
   laneTickFromPointer,
@@ -139,9 +139,10 @@ const TrackLaneView = memo(function TrackLaneView({
   // 대상이 레인이 아니라서 여기서 걸러진다.
   const onLaneDown = (e: ReactPointerEvent<HTMLElement>) => {
     pendingAddRef.current = null;
-    // 팝오버가 열려 있으면 이 누름은 팝오버를 닫는 것이지 클립을 추가하는 게 아니다
-    // (닫기는 document 리스너가 하고, React 핸들러가 먼저 오므로 `open`은 아직 값이 있다).
-    if (open) return;
+    // 팝오버가 열려 있으면(이 레인의 것이든 다른 레인·코드 레인의 것이든) 이 누름은
+    // 팝오버를 닫는 것이지 클립을 추가하는 게 아니다. 닫기는 document 리스너가 하고 React의
+    // 루트 핸들러가 먼저 오므로, 아직 열려 있는 팝오버 수를 동기적으로 읽는다.
+    if (hasOpenPopover()) return;
     if (!editable || e.button !== 0 || e.target !== e.currentTarget) return;
     if (!Number.isFinite(e.clientY)) return;
     const lane = laneRef.current;

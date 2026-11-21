@@ -650,6 +650,23 @@ describe("ChordLane 경계 드래그", () => {
     expect(h.studio().song.progression[1].start).toBe(5760);
   });
 
+  it("캡처한 핸들이 DOM에서 사라진 묵은 드래그는 다른 포인터의 새 pointerdown이 대체한다", () => {
+    const h = renderLane();
+    firePointer(handle(3), "pointerdown", { clientX: xAt(11520) });
+    // 스펙상 요소가 떨어지면 lostpointercapture가 document로 가서 React가 못 받는다
+    handle(3).remove();
+    firePointer(handle(1), "pointerdown", {
+      clientX: xAt(3840),
+      pointerId: 2,
+    });
+    firePointer(handle(1), "pointermove", {
+      clientX: xAt(5760),
+      pointerId: 2,
+    });
+    firePointer(handle(1), "pointerup", { clientX: xAt(5760), pointerId: 2 });
+    expect(h.studio().song.progression[1].start).toBe(5760);
+  });
+
   it("레인의 화면 위치가 스크롤로 밀려 있어도 scrollLeft를 또 더하지 않는다", () => {
     const h = renderWithStudio(<Studio />);
     const laneEl = screen.getByTestId("chord-lane");
