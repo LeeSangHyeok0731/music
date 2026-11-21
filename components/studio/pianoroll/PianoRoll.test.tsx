@@ -597,11 +597,14 @@ describe("본문", () => {
     expect(c4.getAttribute("aria-pressed")).toBe("false");
     expect(c4.className).toContain("bg-indigo-500/25");
     expect(c4.className).toContain("border-indigo-400/60");
+    // 위치는 음 칸(본문 버튼과 길이 핸들을 감싼 래퍼)에 있다.
     // hi 96: C4 = (96-60)*20 = 720px, 폭 240틱 = 48px
-    expect([c4.style.left, c4.style.top, c4.style.width, c4.style.height]).toEqual(
-      ["0px", "720px", "48px", "20px"],
-    );
-    expect([a4.style.left, a4.style.top, a4.style.width]).toEqual([
+    const c4Cell = c4.closest<HTMLElement>("[data-note-key]")!;
+    const a4Cell = a4.closest<HTMLElement>("[data-note-key]")!;
+    expect(
+      [c4Cell.style.left, c4Cell.style.top, c4Cell.style.width, c4Cell.style.height],
+    ).toEqual(["0px", "720px", "48px", "20px"]);
+    expect([a4Cell.style.left, a4Cell.style.top, a4Cell.style.width]).toEqual([
       "300px",
       `${(96 - 69) * 20}px`,
       "72px",
@@ -615,14 +618,21 @@ describe("본문", () => {
     expect(grid.querySelectorAll("button")).toHaveLength(0);
   });
 
-  it("격자선은 CSS 배경이고 격자 아래 DOM은 코드 색칠과 음뿐이다", () => {
+  it("격자선은 CSS 배경이고 격자 아래 DOM은 코드 색칠과 음 칸(본문 버튼 + 길이 핸들)뿐이다", () => {
     renderStudio();
     openN1();
     const grid = within(roll()).getByTestId("roll-grid");
     for (const child of grid.children) {
       expect(
-        child.hasAttribute("data-chord-tone") || child.tagName === "BUTTON",
+        child.hasAttribute("data-chord-tone") ||
+          child.hasAttribute("data-note-key"),
       ).toBe(true);
+      if (child.hasAttribute("data-note-key")) {
+        expect([...child.children].map((c) => c.tagName)).toEqual([
+          "BUTTON",
+          "DIV",
+        ]);
+      }
     }
   });
 

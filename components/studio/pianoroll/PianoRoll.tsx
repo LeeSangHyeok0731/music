@@ -1,10 +1,16 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { createPortal } from "react-dom";
 
 import type { Clip } from "@/lib/score/model";
-import { displayRange, type GridUnit } from "@/lib/score/notes";
+import { displayRange, type GridUnit, type NoteKey } from "@/lib/score/notes";
 import { ticksToBarBeat } from "@/lib/score/time";
 import { useStudio } from "@/state/useStudio";
 
@@ -15,6 +21,7 @@ import { useModalOpenCount } from "../modal";
 import { KeyColumn } from "./KeyColumn";
 import { NoteGrid, RollChordStrip } from "./NoteGrid";
 import { RollHeader } from "./RollHeader";
+import { SelectionBox } from "./SelectionBox";
 import { VelocityLane } from "./VelocityLane";
 import {
   KEY_COLUMN_WIDTH,
@@ -24,6 +31,7 @@ import {
   rollTickToX,
 } from "./geometry";
 import { useFocusTrap } from "./useFocusTrap";
+import { liveSelection, useNoteGestures } from "./useNoteGestures";
 
 export interface PianoRollProps {
   trackId: string;
@@ -36,9 +44,12 @@ export interface PianoRollProps {
   opener?: HTMLElement | null;
   /** 테스트용: 격자와 코드 띠(둘 다 memo)가 커밋될 때마다 부른다. 재생 위치 갱신에는 불리지 않아야 한다. */
   onGridRender?: () => void;
+  /** 테스트용: 음 하나가 커밋될 때마다 그 음의 키로 부른다. */
+  onNoteRender?: (key: NoteKey) => void;
 }
 
 const NO_NOTES: never[] = [];
+const NO_KEYS: readonly NoteKey[] = [];
 
 /** 클립 타일의 본문 버튼(`ClipBlock`의 `data-clip-id` 래퍼 안 첫 버튼). */
 function clipBodyButton(clipId: string): HTMLElement | null {
@@ -52,11 +63,13 @@ function clipBodyButton(clipId: string): HTMLElement | null {
 
 /**
  * 음 클립 편집 모달(화면 전체). `document.body`로 포털하고, 열려 있는 동안 `useModalOpenCount`로
- * 전역 단축키에 알린다. 지금은 읽기 전용 뼈대다 — 음 조작은 Task 4가 붙인다.
+ * 전역 단축키에 알린다. 음 조작(추가·선택·박스·이동·길이)은 `useNoteGestures`가 격자에 붙인다.
  *
+ * - 음 선택(`NoteKey` 목록)은 이 모달의 지역 상태다. 곡이 바뀌어(되돌리기 등) 사라진 키는 렌더 때
+ *   파생으로 걸러 낸다. 모달이 닫히면(언마운트) 사라진다.
  * - 닫기: `← 돌아가기`, Esc. Esc는 `document` **캡처 단계**에서 처리하고 `preventDefault`로 표시한다.
- *   이미 처리된 Esc(`defaultPrevented`)나 진행 중 제스처(`hasActiveGesture`)가 있으면 건너뛴다
- *   — 제스처 훅이 자기 취소에 먼저 쓴다. 한 번의 Esc는 한 겹만 닫는다.
+ *   한 번의 Esc는 한 겹만: 이미 처리된 Esc(`defaultPrevented`)나 진행 중 제스처(`hasActiveGesture`)가
+ *   있으면 건너뛰고(제스처 훅이 자기 취소에 쓴다), 선택이 있으면 선택만 풀고, 없으면 닫는다.
  * - 포커스: 열릴 때 격자 스크롤 영역(탭 가능)으로, 안에 가둔다. 닫으면 연 요소로 돌려준다.
  *   첫 포커스를 닫기 버튼에 두지 않는 건, 키보드로 연 직후 Space(재생)가 포커스된 버튼의 클릭이 되어
  *   모달을 닫아 버리기 때문이다.
@@ -72,8 +85,9 @@ export function PianoRoll({
   onClose,
   opener,
   onGridRender,
+  onNoteRender,
 }: PianoRollProps) {
-  const { song, playing, getEngine } = useStudio();
+  const { song, playing, getEngine, editable, edit } = useStudio();
   useModalOpenCount(true);
 
   const rootRef = useRef<HTMLDivElement>(null);
@@ -92,11 +106,42 @@ export function PianoRoll({
   const notes = clip?.body.type === "notes" ? clip.body.notes : NO_NOTES;
   const range = instrument ? displayRange(instrument, notes) : null;
 
+  const [rawSelection, setSelection] = useState<readonly NoteKey[]>(NO_KEYS);
+  // 곡에 없는 키(되돌리기로 사라진 음 등)는 거른다. 바뀐 게 없으면 같은 배열이라 격자 memo가 유지된다.
+  const selection = useMemo(
+    () =>
+      liveSelection(
+        clip?.body.type === "notes" ? clip.body.notes : NO_NOTES,
+        rawSelection,
+      ),
+    [clip, rawSelection],
+  );
+  const selectionRef = useRef(selection);
+  useEffect(() => {
+    selectionRef.current = selection;
+  });
+
+  const gestures = useNoteGestures({
+    song,
+    trackId,
+    clipId,
+    editable,
+    unit,
+    hi: range?.hi ?? 0,
+    selection,
+    setSelection,
+    edit: edit.notes,
+  });
+
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key !== "Escape" || e.defaultPrevented || e.isComposing) return;
       if (hasActiveGesture()) return;
       e.preventDefault();
+      if (selectionRef.current.length > 0) {
+        setSelection(NO_KEYS);
+        return;
+      }
       onCloseRef.current();
     };
     document.addEventListener("keydown", onKeyDown, true);
@@ -182,8 +227,14 @@ export function PianoRoll({
                 lo={range.lo}
                 hi={range.hi}
                 unit={unit}
+                selection={selection}
+                preview={gestures.preview}
+                editable={editable}
+                handlers={gestures.handlers}
                 onViewRender={onGridRender}
+                onNoteRender={onNoteRender}
               />
+              {gestures.box && <SelectionBox box={gestures.box} />}
               <Playhead
                 engine={getEngine()}
                 playing={playing}

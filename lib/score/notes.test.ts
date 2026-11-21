@@ -30,6 +30,7 @@ import {
   resizeNotes,
   selectNotesInBox,
   setVelocities,
+  snapTickDelta,
   type GridUnit,
   type NoteKey,
   type NotePlan,
@@ -1183,4 +1184,31 @@ describe("속성: 무작위 음 편집 열", () => {
     expect(counters.changed.get("move") ?? 0).toBeGreaterThan(0);
     expect(counters.changed.get("resize") ?? 0).toBeGreaterThan(0);
   }, 30_000);
+});
+
+describe("snapTickDelta", () => {
+  it("변화량을 가장 가까운 칸으로 반올림한다(이동·길이 계획이 쓰는 같은 규칙)", () => {
+    expect(snapTickDelta(0, "1/8")).toBe(0);
+    expect(snapTickDelta(119, "1/8")).toBe(0);
+    expect(snapTickDelta(120, "1/8")).toBe(240);
+    expect(snapTickDelta(-119, "1/8")).toBe(0);
+    expect(snapTickDelta(-121, "1/8")).toBe(-240);
+    expect(snapTickDelta(700, "1/4")).toBe(480);
+    expect(snapTickDelta(61, "1/16")).toBe(120);
+  });
+
+  it("-0을 남기지 않고 NaN은 NaN이다", () => {
+    expect(Object.is(snapTickDelta(-100, "1/8"), 0)).toBe(true);
+    expect(snapTickDelta(Number.NaN, "1/8")).toBeNaN();
+  });
+
+  it("0으로 스냅되는 변화량이면 이동·길이 계획은 같은 참조다", () => {
+    const song = songWithNotes({ notes: [{ start: 0, length: 480, pitch: 60, velocity: 0.8 }] });
+    const t = song.tracks[0];
+    const c = t.clips[0];
+    const k = [noteKey({ start: 0, pitch: 60 })];
+    expect(snapTickDelta(100, "1/8")).toBe(0);
+    expect(planMoveNotes(song, t.id, c.id, k, 100, 0, "1/8").song).toBe(song);
+    expect(planResizeNotes(song, t.id, c.id, k, 100, "1/8").song).toBe(song);
+  });
 });

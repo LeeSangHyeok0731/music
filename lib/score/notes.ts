@@ -65,6 +65,15 @@ export function displayRange(
   return { lo: Math.max(lo, 0), hi: Math.min(hi, 127) };
 }
 
+/**
+ * 이동·길이 변화량(틱)을 가장 가까운 칸으로 반올림한다. 이동·길이 계획과 UI의 미리보기가 같은
+ * 규칙을 쓰게 하는 단일 출처다(UI는 "0으로 스냅됨 = 제자리"를 이것으로 가린다). `-0`은 `+0`.
+ */
+export function snapTickDelta(dTicks: number, unit: GridUnit): number {
+  const u = GRID_UNITS[unit];
+  return Math.round(dTicks / u) * u + 0;
+}
+
 export type NotePlan = { song: Song; keys: NoteKey[] };
 export type NoteBox = {
   startTick: number;
@@ -289,8 +298,7 @@ export function planMoveNotes(
   const noop: NotePlan = { song, keys: resolved.keys };
   if (resolved.indices.length === 0) return noop;
 
-  const u = GRID_UNITS[unit];
-  const dt = Math.round(dTicks / u) * u;
+  const dt = snapTickDelta(dTicks, unit);
   const dp = Math.round(dPitch);
   if (Number.isNaN(dt) || Number.isNaN(dp)) return noop;
   if (dt === 0 && dp === 0) return noop;
@@ -346,7 +354,7 @@ export function planResizeNotes(
   if (resolved.indices.length === 0) return noop;
 
   const u = GRID_UNITS[unit];
-  const d = Math.round(dLength / u) * u;
+  const d = snapTickDelta(dLength, unit);
   if (Number.isNaN(d) || d === 0) return noop;
 
   let lower = Number.NEGATIVE_INFINITY;
