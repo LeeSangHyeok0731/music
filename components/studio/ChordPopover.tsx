@@ -107,7 +107,19 @@ export function ChordPopover({
       closeRef.current(false);
     };
     // 위치가 fixed라 스크롤·크기 변경으로 구간에서 떨어진다. 따라가지 않고 닫는다.
-    const onMove = () => closeRef.current(false);
+    // 포커스가 팝오버 안(곧 사라진다)이거나 body에 있으면 구간 버튼으로 옮겨 키보드
+    // 포커스를 잃지 않게 한다. 사용자가 다른 곳을 눌러 포커스가 거기 있다면 뺏지 않는다.
+    const onMove = () => {
+      const active = document.activeElement;
+      if (
+        !active ||
+        active === document.body ||
+        rootRef.current?.contains(active)
+      ) {
+        anchor.focus({ preventScroll: true });
+      }
+      closeRef.current(false);
+    };
     document.addEventListener("keydown", onKeyDown);
     document.addEventListener("pointerdown", onPointerDown);
     window.addEventListener("resize", onMove);

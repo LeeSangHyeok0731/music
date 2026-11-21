@@ -297,6 +297,57 @@ describe("ChordLane 팝오버 열고 닫기", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
+  it("resize로 닫힐 때 포커스가 팝오버 안에 있었다면 구간 버튼으로 옮긴다", () => {
+    renderLane();
+    fireEvent.click(seg("C"));
+    expect(dialog().contains(document.activeElement)).toBe(true);
+    fireEvent(window, new Event("resize"));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(document.activeElement).toBe(seg("C"));
+  });
+
+  it("scroll로 닫힐 때도 포커스가 구간 버튼으로 간다(팝오버 안 또는 body에 있었을 때)", () => {
+    renderWithStudio(<Studio />);
+    fireEvent.click(seg("C"));
+    fireEvent.scroll(screen.getByTestId("timeline"));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(document.activeElement).toBe(seg("C"));
+
+    fireEvent.click(seg("Am"));
+    (document.activeElement as HTMLElement).blur();
+    expect(document.activeElement).toBe(document.body);
+    fireEvent(window, new Event("resize"));
+    expect(document.activeElement).toBe(seg("Am"));
+  });
+
+  it("resize로 닫힐 때 포커스가 다른 곳에 있으면 가져가지 않는다", () => {
+    renderLane();
+    const other = document.createElement("button");
+    document.body.append(other);
+    fireEvent.click(seg("C"));
+    other.focus();
+    fireEvent(window, new Event("resize"));
+    expect(document.activeElement).toBe(other);
+    other.remove();
+  });
+
+  it("바깥을 눌러 닫을 때는 포커스를 구간 버튼으로 옮기지 않는다", () => {
+    renderLane();
+    const other = document.createElement("button");
+    document.body.append(other);
+    fireEvent.click(seg("C"));
+    other.focus();
+    firePointer(other, "pointerdown", { clientX: 5 });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(document.activeElement).toBe(other);
+    // 포커스가 팝오버 안에 남은 채 바깥 pointerdown이 와도 앵커로 가져오지 않는다
+    fireEvent.click(seg("C"));
+    expect(dialog().contains(document.activeElement)).toBe(true);
+    firePointer(document.body, "pointerdown", { clientX: 5 });
+    expect(document.activeElement).not.toBe(seg("C"));
+    other.remove();
+  });
+
   it("타임라인을 가로로 스크롤하면 닫힌다", () => {
     renderWithStudio(<Studio />);
     fireEvent.click(seg("C"));
@@ -454,6 +505,7 @@ describe("ChordLane 경계 드래그", () => {
   it("스냅되지 않은 끝 위치는 가장 가까운 반마디 격자로 커밋된다", () => {
     const h = renderLane();
     firePointer(handle(2), "pointerdown", { clientX: xAt(7680) });
+    firePointer(handle(2), "pointermove", { clientX: xAt(7680 - 1000) });
     firePointer(handle(2), "pointerup", { clientX: xAt(7680 - 1000) });
     // 6680 -> 7 * 960 = 6720
     expect(h.studio().song.progression[2].start).toBe(6720);
@@ -532,6 +584,7 @@ describe("ChordLane 경계 드래그", () => {
   it("pointerup 뒤에 오는 lostpointercapture는 두 번째 커밋을 만들지 않는다", () => {
     const h = renderLane();
     firePointer(handle(1), "pointerdown", { clientX: xAt(3840) });
+    firePointer(handle(1), "pointermove", { clientX: xAt(5760) });
     firePointer(handle(1), "pointerup", { clientX: xAt(5760) });
     fireEvent(
       handle(1),
@@ -574,6 +627,44 @@ describe("ChordLane 경계 드래그", () => {
     fireBadPointer(handle(1), "pointermove", Number.NaN);
     expect(widths()[0]).toBe("480px");
     fireBadPointer(handle(1), "pointerup", Number.NaN);
+    expect(h.studio().song.progression[1].start).toBe(5760);
+  });
+
+  it("놓을 때 up 이벤트의 x가 아니라 마지막 미리보기 틱을 커밋한다(본 것과 같은 값)", () => {
+    const h = renderLane();
+    firePointer(handle(1), "pointerdown", { clientX: xAt(3840) });
+    firePointer(handle(1), "pointermove", { clientX: xAt(5760) });
+    expect(widths()[0]).toBe("480px");
+    // up의 좌표가 마지막 move와 다르다(브라우저가 move 없이 up 좌표만 어긋나게 줄 수 있다)
+    firePointer(handle(1), "pointerup", { clientX: xAt(960) });
+    expect(h.studio().song.progression[1].start).toBe(5760);
+    expect(widths()[0]).toBe("480px");
+  });
+
+  it("move 없이 up만 오면 시작 위치 그대로라 커밋하지 않는다", () => {
+    const h = renderLane();
+    firePointer(handle(1), "pointerdown", { clientX: xAt(3840) });
+    firePointer(handle(1), "pointerup", { clientX: xAt(5760) });
+    expect(h.studio().canUndo).toBe(false);
+  });
+
+  it("setPointerCapture가 던지면 드래그를 시작하지 않고, 다음 pointerdown은 동작한다", () => {
+    const h = renderLane();
+    const spy = vi
+      .spyOn(HTMLElement.prototype, "setPointerCapture")
+      .mockImplementationOnce(() => {
+        throw new DOMException("no such pointer", "NotFoundError");
+      });
+    firePointer(handle(1), "pointerdown", { clientX: xAt(3840) });
+    firePointer(handle(1), "pointermove", { clientX: xAt(5760) });
+    expect(widths()).toEqual(["320px", "320px", "320px", "320px"]);
+    firePointer(handle(1), "pointerup", { clientX: xAt(5760) });
+    expect(h.studio().canUndo).toBe(false);
+
+    spy.mockRestore();
+    firePointer(handle(1), "pointerdown", { clientX: xAt(3840) });
+    firePointer(handle(1), "pointermove", { clientX: xAt(5760) });
+    firePointer(handle(1), "pointerup", { clientX: xAt(5760) });
     expect(h.studio().song.progression[1].start).toBe(5760);
   });
 

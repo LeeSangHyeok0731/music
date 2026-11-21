@@ -149,7 +149,9 @@ export function useBoundaryDrag({
       try {
         e.currentTarget.setPointerCapture(e.pointerId);
       } catch {
-        // 캡처를 못 잡아도 드래그는 진행한다(요소 안에서는 move가 온다).
+        // 캡처 없이 시작하면 요소 밖으로 나가는 순간 move·up이 끊겨 드래그가 굳는다.
+        // 시작하지 않는다(activeRef도 만들지 않으므로 다음 pointerdown이 바로 동작한다).
+        return;
       }
       e.preventDefault();
       activeRef.current = {
@@ -175,7 +177,10 @@ export function useBoundaryDrag({
       activeRef.current = null;
       releaseCapture(active.target, active.pointerId);
       setPreview(null);
-      const tick = tickOf(e) ?? active.tick;
+      // 마지막 미리보기 틱을 커밋한다 — 사용자가 본 것과 같은 값. up 이벤트 자신의 x는
+      // 마지막 move와 어긋날 수 있어(브라우저가 move를 합치거나 up 좌표가 다를 때)
+      // 쓰면 화면에 없던 위치로 커밋된다.
+      const tick = active.tick;
       if (
         previewBoundary(active.original, active.index, tick) !== active.original
       ) {
