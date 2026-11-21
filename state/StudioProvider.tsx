@@ -66,6 +66,7 @@ const INSTRUMENT_LABEL: Record<InstrumentId, string> = {
 const PLAY_FAILED = "소리를 시작하지 못했습니다. 재생 버튼을 다시 눌러 주세요.";
 const SAVE_FAILED = "브라우저에 저장하지 못했습니다";
 const EDIT_FAILED = "편집을 적용하지 못했습니다";
+const ENGINE_SYNC_FAILED = "곡을 엔진에 적용하지 못했습니다";
 
 function notReadyMessage(failed: readonly InstrumentId[]): string {
   const names = failed.map((i) => INSTRUMENT_LABEL[i]).join(", ");
@@ -137,6 +138,11 @@ function bindAutoStop(engine: StudioEngine, handler: (() => void) | null) {
   engine.onStop = handler;
 }
 
+/** 대기 중 저장이 있으면 즉시 실행한다(한 번만 — 저장 함수가 스스로 비운다). */
+function flushPendingSave(ref: { current: (() => void) | null }) {
+  ref.current?.();
+}
+
 type Phase = "idle" | "pending" | "playing";
 
 export function StudioProvider({
@@ -161,12 +167,21 @@ export function StudioProvider({
   const sessionRef = useRef(0);
 
   const [position, setPosition] = useState(START_POSITION);
-  const [message, setMessage] = useState<string | null>(null);
+  const [message, setMessageState] = useState<string | null>(null);
+  // 지금 보이는 메시지. 저장 안내가 더 중요한 메시지를 덮지 않게 핸들러·effect가
+  // 읽는다. showMessage에서만 바꾼다.
+  const messageRef = useRef<string | null>(null);
   const [storedSelection, setSelection] = useState<Selection>(null);
   const [metronome, setMetronomeState] = useState(false);
   /** 사용자 편집(실행취소·템포 포함)마다 오른다. 0이면 아직 저장할 것이 없다. */
   const [saveRequest, setSaveRequest] = useState(0);
-  const saveFailedNotifiedRef = useRef(false);
+  /** 저장 실패(차단·용량·저장소 없음) 안내를 이미 보였는가. 한 번만 알린다. */
+  const saveNotifiedRef = useRef(false);
+  /**
+   * 디바운스 중인 저장. 저장 effect가 넣고, 저장이 끝나면 비운다. 언마운트 때
+   * 마운트 전용 effect의 정리가 이것을 즉시 실행한다(대기 중 편집을 잃지 않게).
+   */
+  const pendingSaveRef = useRef<(() => void) | null>(null);
 
   const song = history.present;
   const playing = phase === "playing";
@@ -174,6 +189,18 @@ export function StudioProvider({
   const editable = phase === "idle";
   const selection =
     storedSelection && clipExists(song, storedSelection) ? storedSelection : null;
+
+  const showMessage = useCallback((next: string | null) => {
+    messageRef.current = next;
+    setMessageState(next);
+  }, []);
+
+  /** 저장 실패 안내. 한 번만, 그리고 다른 메시지가 떠 있으면 덮지 않는다(다음 실패 때 다시 시도). */
+  const notifySaveFailed = useCallback(() => {
+    if (saveNotifiedRef.current || messageRef.current !== null) return;
+    saveNotifiedRef.current = true;
+    showMessage(SAVE_FAILED);
+  }, [showMessage]);
 
   const sampleStatuses = useSyncExternalStore(
     bank.subscribe,
@@ -192,16 +219,23 @@ export function StudioProvider({
     historyRef.current = restored;
     /* eslint-disable react-hooks/set-state-in-effect -- 브라우저 저장소를 마운트 뒤 한 번 읽는 두 단계 렌더(하이드레이션 일치)다. */
     setHistory(restored);
-    if (loaded.notice) setMessage(loaded.notice);
+    if (loaded.notice) showMessage(loaded.notice);
     /* eslint-enable react-hooks/set-state-in-effect */
-  }, [storage]);
+  }, [storage, showMessage]);
 
   // 곡을 엔진에 맞춘다. pending·playing 동안은 엔진이 거절하므로 건너뛰고,
   // idle로 돌아올 때(not-ready·정지·자동 정지) 그동안 바뀐 곡으로 다시 맞춘다.
   useEffect(() => {
     if (playing || pending) return;
-    engine.setSong(song);
-  }, [engine, song, playing, pending]);
+    try {
+      engine.setSong(song);
+    } catch {
+      // 편집 함수와 parseSong을 거친 곡이라 오지 않아야 하는 길이다(모르는 패턴 등).
+      // 엔진은 던질 때 아무것도 바꾸지 않으므로 앱을 죽이지 않고 알리기만 한다.
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- 드문 오류 경로의 안내 한 번이다.
+      showMessage(ENGINE_SYNC_FAILED);
+    }
+  }, [engine, song, playing, pending, showMessage]);
 
   useEffect(() => {
     // 곡 끝 도달로 인한 자동 정지도 사용자가 정지를 누른 것과 같은 결과여야 한다.
@@ -234,28 +268,34 @@ export function StudioProvider({
     return () => window.clearInterval(id);
   }, [playing, engine, song]);
 
-  // 자동 저장. 사용자 편집 뒤 300ms 디바운스, pagehide 때는 즉시. 대기 중
-  // 저장은 다음 편집(새 타이머)이나 언마운트에서 버린다.
+  // 자동 저장. 사용자 편집 뒤 300ms 디바운스, pagehide와 언마운트 때는 즉시.
+  // 다음 편집이 오면 대기 중 저장은 새 곡의 저장으로 바뀐다(옛 곡은 쓰지 않는다).
+  // 저장소가 없거나(차단) 쓰기가 던지면 한 번만 알린다 — 편집이 있을 때만이다.
   useEffect(() => {
-    if (saveRequest === 0 || !storage) return;
-    let done = false;
+    pendingSaveRef.current = null;
+    if (saveRequest === 0) return;
+    // 한 번만 실행된다: 실행하면 타이머·리스너를 떼고 pendingSaveRef를 비우므로
+    // 타이머·pagehide·언마운트 중 어느 길로도 다시 불리지 않는다.
     const save = () => {
-      if (done) return;
-      done = true;
       window.clearTimeout(timer);
       window.removeEventListener("pagehide", save);
-      if (!writeStored(storage, song) && !saveFailedNotifiedRef.current) {
-        saveFailedNotifiedRef.current = true;
-        setMessage(SAVE_FAILED);
-      }
+      if (pendingSaveRef.current === save) pendingSaveRef.current = null;
+      if (!storage || !writeStored(storage, song)) notifySaveFailed();
     };
     const timer = window.setTimeout(save, AUTOSAVE_DEBOUNCE_MS);
     window.addEventListener("pagehide", save);
+    pendingSaveRef.current = save;
     return () => {
+      // pendingSaveRef는 비우지 않는다. 언마운트면 아래 effect의 정리가 그것을
+      // 실행해야 하고, 다음 편집이면 다음 effect가 바로 갈아 끼운다.
       window.clearTimeout(timer);
       window.removeEventListener("pagehide", save);
     };
-  }, [saveRequest, song, storage]);
+  }, [saveRequest, song, storage, notifySaveFailed]);
+
+  // 언마운트 때 대기 중 저장을 즉시 한다. StrictMode의 모의 언마운트는 첫 편집
+  // 전이라(saveRequest 0) 대기 중 저장이 없어 아무것도 쓰지 않는다.
+  useEffect(() => () => flushPendingSave(pendingSaveRef), []);
 
   /** 사용자 편집으로 생긴 새 히스토리를 반영하고 저장을 건다. */
   const accept = useCallback((next: History<Song>) => {
@@ -280,13 +320,13 @@ export function StudioProvider({
       try {
         next = commit(current, update);
       } catch {
-        setMessage(EDIT_FAILED);
+        showMessage(EDIT_FAILED);
         return;
       }
       if (next === current) return;
       accept(next);
     },
-    [accept],
+    [accept, showMessage],
   );
 
   const edit = useMemo<StudioEdits>(
@@ -340,7 +380,7 @@ export function StudioProvider({
       if (sessionRef.current !== session) return;
       phaseRef.current = "idle";
       setPhase("idle");
-      setMessage(PLAY_FAILED);
+      showMessage(PLAY_FAILED);
       return;
     }
     // 그 사이 stop()·자동 정지·언마운트가 있었으면 이 결과는 버린다.
@@ -353,9 +393,9 @@ export function StudioProvider({
     phaseRef.current = "idle";
     setPhase("idle");
     if (result.status === "not-ready") {
-      setMessage(notReadyMessage(result.failed));
+      showMessage(notReadyMessage(result.failed));
     }
-  }, [engine]);
+  }, [engine, showMessage]);
 
   const stop = useCallback(() => {
     sessionRef.current += 1;
@@ -377,8 +417,13 @@ export function StudioProvider({
     (instrument: InstrumentId) => bank.prefetch([instrument]),
     [bank],
   );
-  const dismissMessage = useCallback(() => setMessage(null), []);
-  const getEngine = useCallback(() => engine, [engine]);
+  const dismissMessage = useCallback(() => showMessage(null), [showMessage]);
+  // 플레이헤드는 읽기만 한다. 엔진 객체 자체를 내주지 않아 UI가 재생 제어를 우회하지 못한다.
+  const engineReader = useMemo(
+    () => ({ currentTick: () => engine.currentTick() }),
+    [engine],
+  );
+  const getEngine = useCallback(() => engineReader, [engineReader]);
 
   const api = useMemo<StudioApi>(
     () => ({

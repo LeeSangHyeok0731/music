@@ -18,6 +18,11 @@ import type {
  * 그동안과 재생 중에는 `setSong`이 `false`를 돌려주며 아무것도 바꾸지 않는다.
  * `not-ready`·`superseded`·거부·`stop()`·자동 정지가 바쁜 상태를 푼다.
  * 이걸 흉내 내지 않으면 "대기 중 편집은 엔진에 닿지 않는다"는 버그를 테스트가 못 본다.
+ *
+ * **실제 엔진과 다른 점:** 가짜는 결과를 강제하지 않는다. `stop()` 뒤에도
+ * `resolvePlay({ status: "playing" })`가 그대로 `playing`으로 끝난다. 실제 엔진은 그
+ * 경우 세션 번호 때문에 `superseded`를 돌려준다. 일부러 이렇게 둔다 — Provider가
+ * 늦게 온 결과를 자기 세션 토큰으로 버리는지(엔진을 믿지 않고도 안전한지) 시험하려는 것이다.
  */
 
 export type Statuses = Record<InstrumentId, SampleStatus>;

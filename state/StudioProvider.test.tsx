@@ -601,13 +601,45 @@ describe("7. 자동 저장", () => {
     expect(fake.storage!.setItem).toHaveBeenCalledTimes(1);
   });
 
-  it("저장소가 없으면 편집해도 조용히 건너뛴다", () => {
+  it("저장소가 없으면(차단) 첫 편집의 저장 때 한 번만 알리고 편집은 계속된다", () => {
     installFakeTimers();
     const { api } = setup({ storage: false });
+    // 편집 전에는 알리지 않는다(처음 불러온 곡은 저장하지 않으므로).
+    act(() => vi.advanceTimersByTime(10_000));
+    expect(api().message).toBeNull();
+
     act(() => api().edit.setChord(0, changeFirstChord));
     act(() => vi.advanceTimersByTime(300));
-    expect(api().message).toBeNull();
+    expect(api().message).toBe(SAVE_FAILED);
     expect(api().song.progression[0].chord).toEqual(changeFirstChord);
+
+    act(() => api().dismissMessage());
+    act(() => api().edit.setBars(9));
+    act(() => vi.advanceTimersByTime(300));
+    expect(api().message).toBeNull();
+    expect(api().song.bars).toBe(9);
+  });
+
+  it("저장 실패 안내는 이미 떠 있는 더 중요한 메시지(not-ready)를 덮지 않고, 다음 실패 때 보인다", async () => {
+    installFakeTimers();
+    const { api, fake } = setup({ playMode: "manual" });
+    fake.storage!.failSetItem = true;
+    act(() => {
+      void api().play();
+    });
+    await act(async () => fake.resolvePlay({ status: "not-ready", failed: ["bass"] }));
+    const notReady = "샘플을 불러오지 못한 악기가 있어 재생하지 않았습니다: 베이스";
+    expect(api().message).toBe(notReady);
+
+    act(() => api().edit.setChord(0, changeFirstChord));
+    act(() => vi.advanceTimersByTime(300));
+    expect(fake.storage!.setItem).toHaveBeenCalledTimes(1);
+    expect(api().message).toBe(notReady);
+
+    act(() => api().dismissMessage());
+    act(() => api().edit.setBars(9));
+    act(() => vi.advanceTimersByTime(300));
+    expect(api().message).toBe(SAVE_FAILED);
   });
 });
 
@@ -711,23 +743,79 @@ describe("위치 표시", () => {
 });
 
 describe("9. 언마운트", () => {
-  it("onStop을 떼고 dispose하며 남은 타이머가 없다(대기 중 저장은 버린다)", async () => {
+  it("onStop을 떼고 dispose하며, 대기 중 저장은 최신 곡으로 한 번 즉시 쓰고 남은 타이머가 없다", async () => {
     installFakeTimers();
     const { api, fake, unmount } = setup();
     expect(typeof fake.engine.onStop).toBe("function");
 
-    act(() => api().edit.setChord(0, changeFirstChord)); // 저장 타이머
+    act(() => api().edit.setChord(0, changeFirstChord));
+    act(() => vi.advanceTimersByTime(100));
+    act(() => api().edit.setBars(9)); // 저장 타이머(최신 곡)
+    const latest = api().song;
     await act(async () => api().play()); // 위치 인터벌
     expect(vi.getTimerCount()).toBeGreaterThan(0);
+    expect(fake.storage!.setItem).not.toHaveBeenCalled();
 
     unmount();
     expect(fake.engine.onStop).toBeNull();
     expect(fake.engine.dispose).toHaveBeenCalledTimes(1);
     expect(vi.getTimerCount()).toBe(0);
+    expect(fake.storage!.setItem).toHaveBeenCalledTimes(1);
+    const [key, value] = fake.storage!.setItem.mock.calls[0];
+    expect(key).toBe(AUTOSAVE_KEY);
+    expect(loadSong(value).song).toEqual(latest);
+  });
+
+  it("언마운트 때 한 번 쓴 저장은 pagehide·타이머가 다시 쓰지 않는다", () => {
+    installFakeTimers();
+    const { api, fake, unmount } = setup();
+    act(() => api().edit.setChord(0, changeFirstChord));
+    unmount();
+    expect(fake.storage!.setItem).toHaveBeenCalledTimes(1);
 
     window.dispatchEvent(new Event("pagehide"));
     act(() => vi.advanceTimersByTime(1000));
-    expect(fake.storage!.setItem).not.toHaveBeenCalled();
+    expect(fake.storage!.setItem).toHaveBeenCalledTimes(1);
+  });
+
+  it("대기 중 저장이 없으면 언마운트는 아무것도 쓰지 않는다", () => {
+    installFakeTimers();
+    const fresh = setup();
+    fresh.unmount();
+    expect(fresh.fake.storage!.setItem).not.toHaveBeenCalled();
+
+    // 저장이 이미 끝났으면 다시 쓰지 않는다.
+    const saved = setup();
+    act(() => saved.api().edit.setChord(0, changeFirstChord));
+    act(() => vi.advanceTimersByTime(300));
+    expect(saved.fake.storage!.setItem).toHaveBeenCalledTimes(1);
+    saved.unmount();
+    expect(saved.fake.storage!.setItem).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("엔진 동기화 오류와 읽기 창", () => {
+  it("engine.setSong이 던져도 앱이 죽지 않고 안내하며 편집은 계속된다", () => {
+    const fake = createFakeDeps();
+    fake.engine.setSong.mockImplementation(() => {
+      throw new Error("unknown pattern");
+    });
+    const { api } = setup(fake);
+    expect(api().message).toBe("곡을 엔진에 적용하지 못했습니다");
+
+    act(() => api().dismissMessage());
+    act(() => api().edit.setBars(9));
+    expect(api().song.bars).toBe(9);
+    expect(api().message).toBe("곡을 엔진에 적용하지 못했습니다");
+  });
+
+  it("getEngine()은 currentTick만 내주는 읽기 창이다", () => {
+    const { api, fake } = setup();
+    fake.engine.currentTick.mockReturnValue(1234);
+    const reader = api().getEngine();
+    expect(Object.keys(reader)).toEqual(["currentTick"]);
+    expect(reader.currentTick()).toBe(1234);
+    expect(api().getEngine()).toBe(reader);
   });
 });
 

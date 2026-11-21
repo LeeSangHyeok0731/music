@@ -75,7 +75,7 @@ export type StudioApi = {
   setTempo(bpm: number): void;
   metronome: boolean;
   setMetronome(on: boolean): void;
-  /** 플레이헤드용(읽기). 재생 제어는 `play`/`stop`을 쓴다. */
-  getEngine(): StudioEngine;
+  /** 플레이헤드용 읽기 전용 창. 재생 제어는 `play`/`stop`을 쓴다. */
+  getEngine(): Pick<StudioEngine, "currentTick">;
   edit: StudioEdits;
 };
