@@ -18,6 +18,7 @@ import {
   RULER_HEIGHT,
   TRACK_LANE_HEIGHT,
 } from "./layout";
+import { useShortcuts } from "./useShortcuts";
 
 /**
  * 편집 화면의 최상위. `StudioProvider` 안에서 쓴다(Provider는 만들지 않는다).
@@ -28,6 +29,7 @@ import {
  */
 export function Studio() {
   const { song, playing, getEngine } = useStudio();
+  useShortcuts();
 
   return (
     <div className="flex h-dvh flex-col bg-[#0b0c0f] text-zinc-200">

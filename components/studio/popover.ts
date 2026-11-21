@@ -68,8 +68,12 @@ export function usePopoverDismiss({
   }, []);
 
   useEffect(() => {
+    // 캡처 단계 + preventDefault: Esc 한 번은 한 겹만 닫는다(드래그 → 팝오버 → 선택).
+    // 이미 처리된 Esc(진행 중 드래그가 취소에 쓴 것)에는 반응하지 않는다.
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") closeRef.current(true);
+      if (e.key !== "Escape" || e.defaultPrevented) return;
+      e.preventDefault();
+      closeRef.current(true);
     };
     const onPointerDown = (e: PointerEvent) => {
       const target = e.target as Node | null;
@@ -93,12 +97,12 @@ export function usePopoverDismiss({
       }
       closeRef.current(false);
     };
-    document.addEventListener("keydown", onKeyDown);
+    document.addEventListener("keydown", onKeyDown, true);
     document.addEventListener("pointerdown", onPointerDown);
     window.addEventListener("resize", onMove);
     window.addEventListener("scroll", onMove, true);
     return () => {
-      document.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("keydown", onKeyDown, true);
       document.removeEventListener("pointerdown", onPointerDown);
       window.removeEventListener("resize", onMove);
       window.removeEventListener("scroll", onMove, true);

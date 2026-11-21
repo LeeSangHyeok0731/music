@@ -233,11 +233,15 @@ export function useClipDrag({
   const dragging = preview !== null;
   useEffect(() => {
     if (!dragging) return;
+    // 캡처 단계 + preventDefault: 이 Esc는 드래그 취소로 쓰였다는 표시다. 팝오버 닫기와
+    // 선택 해제(`useShortcuts`, 버블 단계)가 같은 Esc에 또 반응하지 않게 한다. 마운트 순서와 무관.
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") cancel();
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      cancel();
     };
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => document.removeEventListener("keydown", onKeyDown, true);
   }, [dragging, cancel]);
 
   const bindGesture = (kind: DragKind, clipId: string): ClipHandleProps => ({
