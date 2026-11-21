@@ -15,3 +15,11 @@ export const INSTRUMENT_DOT: Record<InstrumentId, string> = {
   bass: "bg-amber-500",
   drums: "bg-rose-500",
 };
+
+/** 클립 타일 색(배경 + 테두리). Tailwind가 찾도록 클래스 전체를 적는다. */
+export const INSTRUMENT_TILE: Record<InstrumentId, string> = {
+  piano: "bg-indigo-500/25 border-indigo-400/60",
+  guitar: "bg-emerald-500/25 border-emerald-400/60",
+  bass: "bg-amber-500/25 border-amber-400/60",
+  drums: "bg-rose-500/25 border-rose-400/60",
+};

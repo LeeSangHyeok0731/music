@@ -8,6 +8,7 @@ import { ChordLane } from "./ChordLane";
 import { Playhead } from "./Playhead";
 import { Ruler } from "./Ruler";
 import { TopBar } from "./TopBar";
+import { TrackLane } from "./TrackLane";
 import { PX_PER_BAR } from "./geometry";
 import { INSTRUMENT_DOT, INSTRUMENT_LABEL } from "./instruments";
 import {
@@ -22,8 +23,8 @@ import {
  * 편집 화면의 최상위. `StudioProvider` 안에서 쓴다(Provider는 만들지 않는다).
  *
  * 좌측 헤더 열(고정 폭)과 가로 스크롤되는 타임라인(`data-testid="timeline"`)이
- * 같은 행 높이 상수(`layout.ts`)를 쓴다. 코드 레인은 `ChordLane`이 그리고, 트랙 레인 자리
- * (`track-lane-<id>`)는 비어 있다 — 이후 Task가 이 컨테이너 안을 채운다.
+ * 같은 행 높이 상수(`layout.ts`)를 쓴다. 코드 레인은 `ChordLane`, 트랙 레인(`track-lane-<id>`)은
+ * `TrackLane`이 그린다.
  */
 export function Studio() {
   const { song, playing, getEngine } = useStudio();
@@ -83,14 +84,7 @@ export function Studio() {
                 <Ruler bars={song.bars} />
                 <ChordLane />
                 {song.tracks.map((track) => (
-                  <div
-                    key={track.id}
-                    data-testid={`track-lane-${track.id}`}
-                    style={{
-                      height: TRACK_LANE_HEIGHT,
-                      boxShadow: ROW_DIVIDER,
-                    }}
-                  />
+                  <TrackLane key={track.id} trackId={track.id} />
                 ))}
               </div>
               <Playhead

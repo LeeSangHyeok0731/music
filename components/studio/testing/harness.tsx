@@ -1,4 +1,4 @@
-import { render, type RenderResult } from "@testing-library/react";
+import { act, render, screen, type RenderResult } from "@testing-library/react";
 import { useEffect, type ReactElement } from "react";
 
 import { StudioProvider } from "@/state/StudioProvider";
@@ -9,6 +9,8 @@ import {
 } from "@/state/testing/fake-deps";
 import type { StudioApi } from "@/state/types";
 import { useStudio } from "@/state/useStudio";
+
+import { LANE_LEFT, stubLaneRect } from "./pointer";
 
 /**
  * 편집 화면 컴포넌트 테스트의 공통 틀(Task 7~10). 가짜 엔진·뱅크·저장소를 끼운
@@ -70,4 +72,30 @@ export function renderWithStudio(
       return latest.api;
     },
   };
+}
+
+/**
+ * 레인 하나를 렌더하고 그 요소의 화면 사각형을 고정한다(`left = LANE_LEFT`, 폭 1280).
+ * `laneTestId`는 `chord-lane`, `track-lane-<id>` 같은 레인의 `data-testid`.
+ */
+export function renderLane(
+  ui: ReactElement,
+  laneTestId: string,
+  height: number,
+  options: FakeDepsOptions = {},
+): StudioHarness {
+  const harness = renderWithStudio(ui, options);
+  stubLaneRect(screen.getByTestId(laneTestId), {
+    left: LANE_LEFT,
+    width: 1280,
+    height,
+  });
+  return harness;
+}
+
+/** `play()`를 시작한다(기본 가짜 엔진이면 재생 중, `playMode: "manual"`이면 대기 중). */
+export async function startPlaying(harness: StudioHarness): Promise<void> {
+  await act(async () => {
+    void harness.studio().play();
+  });
 }

@@ -13,13 +13,17 @@ import { ChordLane } from "./ChordLane";
 import { Studio } from "./Studio";
 import {
   installAudioContextStub,
+  renderLane as renderLaneAt,
   renderWithStudio,
-  type StudioHarness,
+  startPlaying,
 } from "./testing/harness";
 import {
+  LANE_LEFT,
+  fireBadPointer,
   firePointer,
   installPointerCaptureStubs,
   stubLaneRect,
+  xAt,
 } from "./testing/pointer";
 
 let restoreAudio: () => void;
@@ -41,9 +45,6 @@ afterEach(() => {
 });
 
 const ORIGINAL = buildDemoSong().progression;
-const LANE_LEFT = 96;
-/** 틱을 레인 왼쪽이 `LANE_LEFT`일 때의 화면 x로. 1px = 12틱. */
-const xAt = (tick: number) => LANE_LEFT + tick / 12;
 
 function lane() {
   return screen.getByTestId("chord-lane");
@@ -68,26 +69,7 @@ function inDialog(name: string) {
 }
 
 function renderLane(options?: Parameters<typeof renderWithStudio>[1]) {
-  const h = renderWithStudio(<ChordLane />, options);
-  stubLaneRect(lane(), { left: LANE_LEFT, width: 1280, height: 40 });
-  return h;
-}
-
-/** jsdom의 PointerEvent는 NaN clientX를 거부한다. 만든 뒤 값을 덮어써 비정상 입력을 흉내 낸다. */
-function fireBadPointer(el: Element, type: string, clientX: number) {
-  const ev = new PointerEvent(type, {
-    bubbles: true,
-    cancelable: true,
-    pointerId: 1,
-  });
-  Object.defineProperty(ev, "clientX", { value: clientX });
-  fireEvent(el, ev);
-}
-
-async function startPlaying(h: StudioHarness) {
-  await act(async () => {
-    void h.studio().play();
-  });
+  return renderLaneAt(<ChordLane />, "chord-lane", 40, options);
 }
 
 describe("ChordLane 렌더", () => {

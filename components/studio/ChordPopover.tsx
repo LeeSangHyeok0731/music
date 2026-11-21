@@ -12,10 +12,7 @@ import {
   type ChordSegment,
 } from "@/lib/score/model";
 
-/** 팝오버 폭(px). 위치 클램프(`popoverPosition`)와 스타일이 함께 쓴다. */
-export const POPOVER_WIDTH = 224;
-const GAP = 4;
-const MARGIN = 8;
+import { POPOVER_WIDTH, usePopoverDismiss } from "./popover";
 
 const QUALITY_TEXT: Record<ChordQuality, string> = {
   maj: "maj",
@@ -32,21 +29,6 @@ const QUALITY_NAME: Record<ChordQuality, string> = {
   maj7: "메이저 7",
   min7: "마이너 7",
 };
-
-/**
- * 구간 버튼의 화면 사각형 아래에 붙이고 가로로는 뷰포트 안에 가둔다. 팝오버가
- * `position: fixed`라서 타임라인의 `overflow`에 잘리지 않는다.
- */
-export function popoverPosition(
-  anchor: { left: number; bottom: number },
-  viewportWidth: number,
-): { left: number; top: number } {
-  const max = Math.max(MARGIN, viewportWidth - POPOVER_WIDTH - MARGIN);
-  return {
-    left: Math.min(Math.max(anchor.left, MARGIN), max),
-    top: anchor.bottom + GAP,
-  };
-}
 
 export interface ChordPopoverProps {
   /** 팝오버를 연 구간 버튼. 바깥 클릭 판정에서 제외한다(그 버튼의 onClick이 토글한다). */
@@ -82,55 +64,12 @@ export function ChordPopover({
 }: ChordPopoverProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const firstRef = useRef<HTMLButtonElement>(null);
-  const closeRef = useRef(onClose);
-  useEffect(() => {
-    closeRef.current = onClose;
-  });
 
   useEffect(() => {
     firstRef.current?.focus({ preventScroll: true });
   }, []);
 
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") closeRef.current(true);
-    };
-    const onPointerDown = (e: PointerEvent) => {
-      const target = e.target as Node | null;
-      // 열어 준 구간 버튼은 자기 onClick이 토글하므로 여기서 닫지 않는다.
-      if (
-        target &&
-        (rootRef.current?.contains(target) || anchor.contains(target))
-      ) {
-        return;
-      }
-      closeRef.current(false);
-    };
-    // 위치가 fixed라 스크롤·크기 변경으로 구간에서 떨어진다. 따라가지 않고 닫는다.
-    // 포커스가 팝오버 안(곧 사라진다)이거나 body에 있으면 구간 버튼으로 옮겨 키보드
-    // 포커스를 잃지 않게 한다. 사용자가 다른 곳을 눌러 포커스가 거기 있다면 뺏지 않는다.
-    const onMove = () => {
-      const active = document.activeElement;
-      if (
-        !active ||
-        active === document.body ||
-        rootRef.current?.contains(active)
-      ) {
-        anchor.focus({ preventScroll: true });
-      }
-      closeRef.current(false);
-    };
-    document.addEventListener("keydown", onKeyDown);
-    document.addEventListener("pointerdown", onPointerDown);
-    window.addEventListener("resize", onMove);
-    window.addEventListener("scroll", onMove, true);
-    return () => {
-      document.removeEventListener("keydown", onKeyDown);
-      document.removeEventListener("pointerdown", onPointerDown);
-      window.removeEventListener("resize", onMove);
-      window.removeEventListener("scroll", onMove, true);
-    };
-  }, [anchor]);
+  usePopoverDismiss({ anchor, rootRef, onClose });
 
   const { chord } = segment;
 

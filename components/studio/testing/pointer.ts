@@ -15,10 +15,7 @@ import { fireEvent } from "@testing-library/react";
  */
 
 export type PointerType =
-  | "pointerdown"
-  | "pointermove"
-  | "pointerup"
-  | "pointercancel";
+  "pointerdown" | "pointermove" | "pointerup" | "pointercancel";
 
 export interface PointerInit {
   clientX: number;
@@ -120,4 +117,31 @@ export function installPointerCaptureStubs(): () => void {
       else delete proto[name];
     }
   };
+}
+
+/** 테스트 레인의 화면상 왼쪽(`stubLaneRect`로 맞춘다). 헤더 열 폭과 같다. */
+export const LANE_LEFT = 96;
+
+/** 곡 틱을 레인 왼쪽이 `LANE_LEFT`일 때의 화면 x로. 1px = 12틱. */
+export function xAt(tick: number, laneLeft = LANE_LEFT): number {
+  return laneLeft + tick / 12;
+}
+
+/**
+ * jsdom의 PointerEvent는 NaN `clientX`를 거부한다. 만든 뒤 값을 덮어써 비정상 입력을
+ * 흉내 낸다.
+ */
+export function fireBadPointer(
+  el: Element,
+  type: PointerType,
+  clientX: number,
+  pointerId = 1,
+): void {
+  const ev = new PointerEvent(type, {
+    bubbles: true,
+    cancelable: true,
+    pointerId,
+  });
+  Object.defineProperty(ev, "clientX", { value: clientX });
+  fireEvent(el, ev);
 }

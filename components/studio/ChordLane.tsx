@@ -7,9 +7,10 @@ import type { Chord, Song } from "@/lib/score/model";
 import type { StudioEdits } from "@/state/types";
 import { useStudio } from "@/state/useStudio";
 
-import { ChordPopover, popoverPosition } from "./ChordPopover";
+import { ChordPopover } from "./ChordPopover";
 import { clipRect, tickToX } from "./geometry";
 import { CHORD_LANE_HEIGHT, ROW_DIVIDER } from "./layout";
+import { popoverPosition } from "./popover";
 import { useBoundaryDrag } from "./useBoundaryDrag";
 
 const HANDLE_WIDTH = 8;
