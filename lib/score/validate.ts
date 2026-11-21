@@ -1,5 +1,6 @@
 import {
   BEAT_UNITS,
+  CHORD_QUALITIES,
   MAX_BARS,
   MAX_BEATS_PER_BAR,
   type Clip,
@@ -20,6 +21,8 @@ export type ScoreIssueCode =
   | "clip-overlap"
   | "unknown-pattern"
   | "pattern-instrument-mismatch"
+  | "progression-invalid"
+  | "invalid-chord"
   | "note-unsorted"
   | "note-out-of-clip"
   | "pitch-out-of-range"
@@ -63,6 +66,8 @@ export function validateSong(song: Song): ScoreIssue[] {
   }
 
   const songLength = songLengthTicks(song);
+  checkProgression(song, songLength, add);
+
   const trackIds = new Set<string>();
 
   song.tracks.forEach((track, ti) => {
@@ -98,6 +103,50 @@ export function validateSong(song: Song): ScoreIssue[] {
 
 type Add = (code: ScoreIssueCode, path: string, message: string) => void;
 
+/**
+ * 진행은 최소 한 구간이고 0부터 곡 끝까지 빈틈·겹침 없이 이어진다. 구간 길이는
+ * 1틱 이상까지만 요구한다(반마디 하한은 UI 편집 함수의 규칙이다). 코드도 여기서
+ * 본다 — 타입 밖 `quality`는 `chordPitch`에서 터진다.
+ */
+function checkProgression(song: Song, songLength: number, add: Add): void {
+  const { progression } = song;
+  if (progression.length === 0) {
+    add("progression-invalid", "progression", "코드 진행이 비어 있습니다");
+    return;
+  }
+
+  let expectedStart = 0;
+  let contiguous = true;
+  progression.forEach((seg, i) => {
+    const path = `progression[${i}]`;
+    if (!Number.isInteger(seg.start) || !Number.isInteger(seg.length)) {
+      add("non-integer-tick", path, "구간의 start와 length는 정수 틱이어야 합니다");
+    }
+    if (!(seg.length >= 1)) {
+      add("non-positive-length", path, "구간 길이는 1틱 이상이어야 합니다");
+    }
+    const { root, quality } = seg.chord;
+    if (
+      !Number.isInteger(root) ||
+      root < 0 ||
+      root > 11 ||
+      !(CHORD_QUALITIES as readonly string[]).includes(quality)
+    ) {
+      add("invalid-chord", path, "코드는 근음 0~11의 정수와 알려진 종류여야 합니다");
+    }
+    if (seg.start !== expectedStart) contiguous = false;
+    expectedStart = seg.start + seg.length;
+  });
+
+  if (!contiguous || expectedStart !== songLength) {
+    add(
+      "progression-invalid",
+      "progression",
+      "코드 진행은 0부터 곡 끝까지 빈틈과 겹침 없이 이어져야 합니다",
+    );
+  }
+}
+
 function checkClipShape(
   clip: Clip,
   songLength: number,
@@ -118,7 +167,7 @@ function checkClipShape(
 function checkBody(track: Track, clip: Clip, path: string, add: Add): void {
   const { body } = clip;
 
-  if (body.type === "chord") {
+  if (body.type === "pattern") {
     const pattern = getPattern(body.pattern);
     if (!pattern) {
       add("unknown-pattern", path, `알 수 없는 패턴입니다: ${body.pattern}`);

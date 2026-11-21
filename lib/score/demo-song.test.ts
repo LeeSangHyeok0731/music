@@ -16,22 +16,31 @@ describe("데모 곡", () => {
     if (result.ok) expect(result.repairs).toEqual([]);
   });
 
-  it("8마디, 120BPM, 4/4다", () => {
+  it("v3, 8마디, 120BPM, 4/4다", () => {
     const song = buildDemoSong();
+    expect(song.v).toBe(3);
     expect(DEMO_BARS).toBe(8);
     expect(song.bars).toBe(8);
     expect(song.tempo).toBe(120);
     expect(song.timeSignature).toEqual([4, 4]);
   });
 
-  it("악기 4종을 모두 쓰고 코드 클립과 음 클립이 섞여 있다", () => {
+  it("코드 진행은 C–Am–F–G7 각 2마디다", () => {
+    expect(buildDemoSong().progression).toEqual([
+      { start: 0, length: 3840, chord: { root: 0, quality: "maj" } },
+      { start: 3840, length: 3840, chord: { root: 9, quality: "min" } },
+      { start: 7680, length: 3840, chord: { root: 5, quality: "maj" } },
+      { start: 11520, length: 3840, chord: { root: 7, quality: "dom7" } },
+    ]);
+  });
+
+  it("악기 4종을 모두 쓰고 클립은 전부 패턴 클립이다", () => {
     const song = buildDemoSong();
     expect(instrumentsOf(song).sort()).toEqual(
       ["bass", "drums", "guitar", "piano"].sort(),
     );
     const bodies = song.tracks.flatMap((t) => t.clips.map((c) => c.body.type));
-    expect(bodies).toContain("chord");
-    expect(bodies).toContain("notes");
+    expect(new Set(bodies)).toEqual(new Set(["pattern"]));
   });
 
   it("모든 트랙이 소리를 낸다", () => {
@@ -40,17 +49,16 @@ describe("데모 곡", () => {
     }
   });
 
-  it("트랙 5개가 정해진 순서로 있다", () => {
+  it("트랙 4개가 정해진 순서로 있다", () => {
     expect(buildDemoSong().tracks.map((t) => t.id)).toEqual([
       "track-piano",
       "track-guitar",
       "track-bass",
       "track-drums",
-      "track-melody",
     ]);
   });
 
-  it("반주 트랙(피아노·기타·베이스·드럼)은 곡 끝까지 이어진다", () => {
+  it("모든 트랙(피아노·기타·베이스·드럼)은 곡 끝까지 이어진다", () => {
     const song = buildDemoSong();
     const songEnd = DEMO_BARS * 1920;
     for (const id of ["track-piano", "track-guitar", "track-bass", "track-drums"]) {
@@ -60,18 +68,12 @@ describe("데모 곡", () => {
     }
   });
 
-  it("멜로디 클립의 음 6개가 그대로 재생 이벤트 6개가 된다", () => {
-    const melody = expandSong(buildDemoSong()).find(
-      (t) => t.trackId === "track-melody",
+  it("진행에 따라 같은 패턴의 음높이가 달라진다", () => {
+    const piano = expandSong(buildDemoSong()).find(
+      (t) => t.trackId === "track-piano",
     );
-    // 멜로디 클립은 4마디 뒤(5마디째 첫 박, 7680틱)에서 시작한다.
-    expect(melody?.events.map((e) => [e.tick, e.pitch])).toEqual([
-      [7680, 72],
-      [8160, 76],
-      [8640, 79],
-      [9120, 76],
-      [9600, 77],
-      [10560, 74],
-    ]);
+    // 1마디(C 구간)의 첫 음은 C4 = 60, 3마디(Am 구간 시작, 3840틱)의 첫 음은 A4 = 12*5+9 = 69.
+    expect(piano?.events.find((e) => e.tick === 0)?.pitch).toBe(60);
+    expect(piano?.events.find((e) => e.tick === 3840)?.pitch).toBe(69);
   });
 });

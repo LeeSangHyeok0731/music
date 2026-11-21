@@ -41,14 +41,22 @@ describe("parseSong — 통과", () => {
     if (result.ok) expect(result.song.meta.author?.name).toBe("민수");
   });
 
-  it("코드 클립을 받는다", () => {
+  it("패턴 클립을 받는다", () => {
     const input = raw();
-    input.tracks[0].clips[0].body = {
-      type: "chord",
-      chord: { root: 0, quality: "maj" },
-      pattern: "piano-block",
-    };
-    expect(parseSong(input).ok).toBe(true);
+    input.tracks[0].clips[0].body = { type: "pattern", pattern: "piano-block" };
+    expect(parseSong(input)).toMatchObject({ ok: true, repairs: [] });
+  });
+
+  it("여러 구간으로 된 코드 진행을 그대로 받는다", () => {
+    const input = raw(songWithNotes({ notes: [], bars: 2 }));
+    input.progression = [
+      { start: 0, length: 960, chord: { root: 0, quality: "maj" } },
+      { start: 960, length: 960, chord: { root: 9, quality: "min7" } },
+      { start: 1920, length: 1920, chord: { root: 7, quality: "dom7" } },
+    ];
+    const result = parseSong(input);
+    expect(result).toMatchObject({ ok: true, repairs: [] });
+    if (result.ok) expect(result.song.progression).toEqual(input.progression);
   });
 
   it.each([
@@ -64,6 +72,8 @@ describe("parseSong — 통과", () => {
     const input = raw();
     input.timeSignature = [beats, unit];
     input.tracks[0].clips[0].length = ticksPerBar([beats, unit]);
+    // 진행은 곡 끝에 닿아야 한다.
+    input.progression[0].length = ticksPerBar([beats, unit]);
     const result = parseSong(input);
     expect(result).toMatchObject({ ok: true, repairs: [] });
   });
@@ -85,8 +95,74 @@ describe("parseSong — 거부", () => {
 
   it("알 수 없는 버전은 거부한다", () => {
     const input = raw();
-    input.v = 3;
+    input.v = 4;
     expectRejected(input, "v: ");
+  });
+
+  it("v2 곡은 마이그레이션하지 않고 거부한다", () => {
+    const input = raw();
+    input.v = 2;
+    expectRejected(input, "v: ");
+  });
+
+  it("옛 v2 모양의 곡(코드를 품은 클립, 진행 없음)은 거부한다", () => {
+    const input = raw();
+    input.v = 2;
+    delete input.progression;
+    input.tracks[0].clips[0].body = {
+      type: "chord",
+      chord: { root: 0, quality: "maj" },
+      pattern: "piano-block",
+    };
+    const result = parseSong(input);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      const errors = result.errors.join("\n");
+      expect(errors).toContain("v: ");
+      expect(errors).toContain("progression: ");
+      expect(errors).toContain("tracks.0.clips.0.body");
+    }
+  });
+
+  it("v3라도 옛 chord 본문은 거부한다", () => {
+    const input = raw();
+    input.tracks[0].clips[0].body = {
+      type: "chord",
+      chord: { root: 0, quality: "maj" },
+      pattern: "piano-block",
+    };
+    expectRejected(input, "tracks.0.clips.0.body");
+  });
+
+  it("코드 진행이 없거나 비어 있으면 거부한다", () => {
+    const a = raw();
+    delete a.progression;
+    expectRejected(a, "progression: ");
+    const b = raw();
+    b.progression = [];
+    expectRejected(b, "progression: ");
+  });
+
+  it.each([
+    ["빈틈", [[0, 960], [1920, 1920]]],
+    ["겹침", [[0, 2000], [1920, 1920]]],
+    ["0이 아닌 시작", [[480, 3360]]],
+    ["곡 끝에 못 미침", [[0, 1920]]],
+    ["곡 끝을 넘음", [[0, 5000]]],
+  ])("코드 진행의 %s은 복구하지 않고 거부한다", (_, spans) => {
+    const input = raw(songWithNotes({ notes: [], bars: 2 }));
+    input.progression = spans.map(([start, length]) => ({
+      start,
+      length,
+      chord: { root: 0, quality: "maj" },
+    }));
+    expectRejected(input, "progression: 코드 진행");
+  });
+
+  it("코드 진행의 근음이 범위를 벗어나면 zod가 거부한다", () => {
+    const input = raw();
+    input.progression[0].chord.root = 12;
+    expectRejected(input, "progression.0.chord.root: ");
   });
 
   it("알 수 없는 악기는 거부한다", () => {
@@ -97,21 +173,13 @@ describe("parseSong — 거부", () => {
 
   it("알 수 없는 코드 종류는 조용히 바꾸지 않고 거부한다", () => {
     const input = raw();
-    input.tracks[0].clips[0].body = {
-      type: "chord",
-      chord: { root: 0, quality: "aug" },
-      pattern: "piano-block",
-    };
-    expectRejected(input, "tracks.0.clips.0.body.chord.quality: ");
+    input.progression[0].chord.quality = "aug";
+    expectRejected(input, "progression.0.chord.quality: ");
   });
 
   it("알 수 없는 패턴 id는 거부한다", () => {
     const input = raw();
-    input.tracks[0].clips[0].body = {
-      type: "chord",
-      chord: { root: 0, quality: "maj" },
-      pattern: "no-such-pattern",
-    };
+    input.tracks[0].clips[0].body = { type: "pattern", pattern: "no-such-pattern" };
     expectRejected(input, "패턴");
   });
 
@@ -255,10 +323,13 @@ describe("parseSong — 거부", () => {
     // 드럼 패턴을 펼치는 expandSong이 수억 번 돈다.
     const ts: [number, number] = [1000000, 4];
     const input = {
-      v: 2,
+      v: 3,
       tempo: 120,
       timeSignature: ts,
       bars: 500,
+      progression: [
+        { start: 0, length: 500 * ticksPerBar(ts), chord: { root: 0, quality: "maj" } },
+      ],
       tracks: [
         {
           id: "drums",
@@ -268,11 +339,7 @@ describe("parseSong — 거부", () => {
               id: "beat",
               start: 0,
               length: 500 * ticksPerBar(ts),
-              body: {
-                type: "chord",
-                chord: { root: 0, quality: "maj" },
-                pattern: "drum-basic-rock",
-              },
+              body: { type: "pattern", pattern: "drum-basic-rock" },
             },
           ],
         },
@@ -439,6 +506,72 @@ describe("parseSong — 복구", () => {
     const song = expectRepaired(input, "반올림");
     const clip = song.tracks[0].clips[0];
     expect(clip.start + clip.length).toBe(1920);
+  });
+
+  it("코드 진행 구간의 소수 틱은 끝점을 반올림한다", () => {
+    // [0.4, 960) → [0, 960): start와 length 두 값이 바뀐다.
+    const input = raw(songWithNotes({ notes: [], bars: 2 }));
+    input.progression = [
+      { start: 0.4, length: 959.6, chord: { root: 0, quality: "maj" } },
+      { start: 960, length: 2880, chord: { root: 5, quality: "maj" } },
+    ];
+    const result = parseSong(input);
+    if (!result.ok) throw new Error(result.errors.join("\n"));
+    expect(result.repairs).toEqual(["소수 틱 2개를 정수로 반올림했습니다"]);
+    expect(result.song.progression.map((p) => [p.start, p.length])).toEqual([
+      [0, 960],
+      [960, 2880],
+    ]);
+  });
+
+  it("코드 진행의 소수 틱은 클립·음과 함께 센다", () => {
+    // 음 [0.4, 101) → [0, 101): 2개, 구간 길이 1919.6 → 1920: 1개.
+    const input = raw(songWithNotes({ notes: [note(0.4, 100.6)] }));
+    input.progression[0] = { start: 0, length: 1919.6, chord: { root: 0, quality: "maj" } };
+    const result = parseSong(input);
+    if (!result.ok) throw new Error(result.errors.join("\n"));
+    expect(result.repairs).toEqual(["소수 틱 3개를 정수로 반올림했습니다"]);
+  });
+
+  it("코드 진행 구간 사이의 1틱 미만 겹침은 끝점 반올림이 흡수한다", () => {
+    // 첫 구간의 실제 끝 960.4는 다음 시작(960)과 0.4틱 겹치지만 반올림한 끝점은 960이다.
+    const input = raw(songWithNotes({ notes: [], bars: 2 }));
+    input.progression = [
+      { start: 0, length: 960.4, chord: { root: 0, quality: "maj" } },
+      { start: 960, length: 2880, chord: { root: 5, quality: "maj" } },
+    ];
+    const song = expectRepaired(input, "소수 틱 1개를 정수로 반올림했습니다");
+    expect(song.progression.map((p) => [p.start, p.length])).toEqual([
+      [0, 960],
+      [960, 2880],
+    ]);
+  });
+
+  it("반올림한 뒤에도 남는 코드 진행의 빈틈은 거부한다", () => {
+    // 첫 구간의 끝 959.4 → 959. 다음 구간은 960에서 시작해 1틱 빈틈이 남는다.
+    const input = raw(songWithNotes({ notes: [], bars: 2 }));
+    input.progression = [
+      { start: 0, length: 959.4, chord: { root: 0, quality: "maj" } },
+      { start: 960, length: 2880, chord: { root: 5, quality: "maj" } },
+    ];
+    const result = parseSong(input);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.errors.join("\n")).toContain("progression: 코드 진행");
+  });
+
+  it("어긋난 코드 진행 순서를 정렬한다", () => {
+    const input = raw(songWithNotes({ notes: [], bars: 2 }));
+    input.progression = [
+      { start: 1920, length: 1920, chord: { root: 5, quality: "maj" } },
+      { start: 0, length: 1920, chord: { root: 0, quality: "maj" } },
+    ];
+    const result = parseSong(input);
+    if (!result.ok) throw new Error(result.errors.join("\n"));
+    expect(result.repairs).toEqual(["코드 진행 구간의 순서를 start 순으로 정렬했습니다"]);
+    expect(result.song.progression.map((p) => [p.start, p.chord.root])).toEqual([
+      [0, 0],
+      [1920, 5],
+    ]);
   });
 
   it("범위를 넘은 velocity는 클램프한다", () => {

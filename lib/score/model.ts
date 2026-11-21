@@ -1,5 +1,5 @@
 /**
- * 곡 데이터 모델 v2. 순수 타입과 상수만 둔다 — Web Audio도 React도 모른다.
+ * 곡 데이터 모델 v3. 순수 타입과 상수만 둔다 — Web Audio도 React도 모른다.
  *
  * 시간은 전부 PPQ 정수 틱이다. 초로 저장하지 않는다(템포를 바꾸면 곡이 어긋난다).
  */
@@ -8,7 +8,7 @@
 export const PPQ = 480;
 
 /** 곡 파일 형식 버전. 이 값이 아니면 열지 않는다. */
-export const SONG_VERSION = 2;
+export const SONG_VERSION = 3;
 
 export const MIN_TEMPO = 40;
 export const MAX_TEMPO = 240;
@@ -60,10 +60,19 @@ export type Note = {
   velocity: number;
 };
 
-export type ChordBody = {
-  type: "chord";
-  chord: Chord;
+/** 패턴 클립. 코드는 갖지 않는다 — 각 스텝의 코드는 곡의 `progression`에서 찾는다. */
+export type PatternBody = {
+  type: "pattern";
   pattern: PatternId;
+};
+
+/** 곡 전체를 빈틈·겹침 없이 덮는 코드 구간. 코드는 여기서만 정한다. */
+export type ChordSegment = {
+  /** 곡 시작 기준 절대 틱. 정수. */
+  start: number;
+  /** 틱. 정수, 1 이상. */
+  length: number;
+  chord: Chord;
 };
 
 export type NotesBody = {
@@ -72,7 +81,7 @@ export type NotesBody = {
   notes: Note[];
 };
 
-export type ClipBody = ChordBody | NotesBody;
+export type ClipBody = PatternBody | NotesBody;
 
 export type Clip = {
   id: string;
@@ -110,6 +119,8 @@ export type Song = {
   timeSignature: [number, number];
   /** 마디 수. 곡 길이는 `bars × ticksPerBar`로 파생한다. */
   bars: number;
+  /** 곡 전체를 덮는 코드 진행. start 오름차순, 빈틈·겹침 없음. */
+  progression: ChordSegment[];
   tracks: Track[];
   meta: SongMeta;
 };
