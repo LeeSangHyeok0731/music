@@ -1,5 +1,7 @@
 "use client";
 
+import { memo } from "react";
+
 import { PX_PER_BAR, barLabels } from "./geometry";
 
 interface BeatGridProps {
@@ -13,8 +15,12 @@ interface BeatGridProps {
  * 4/4 전용이다: `geometry.ts`의 `tickToX`는 박자표와 무관하게 1920틱=160px이라
  * 4/4가 아닌 곡에서는 선과 클립·플레이헤드가 어긋난다.
  * 클릭을 가로채지 않으며 레인보다 아래에 깔린다(레인 배경은 투명해야 보인다).
+ * props가 숫자뿐인 `memo`라서 재생 위치(10Hz)로 `Studio`가 다시 그려져도 건너뛴다.
  */
-export function BeatGrid({ bars, beatsPerBar }: BeatGridProps) {
+export const BeatGrid = memo(function BeatGrid({
+  bars,
+  beatsPerBar,
+}: BeatGridProps) {
   const beats = barLabels(beatsPerBar).map((b) => b - 1);
   return (
     <div aria-hidden className="pointer-events-none absolute inset-0 z-0">
@@ -37,4 +43,4 @@ export function BeatGrid({ bars, beatsPerBar }: BeatGridProps) {
       )}
     </div>
   );
-}
+});
