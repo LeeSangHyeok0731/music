@@ -319,7 +319,7 @@ const BUTTON_TARGETS: Array<[string, () => Element]> = [
 ];
 
 describe("Space — 재생/정지 토글", () => {
-  it("재생 → 대기 중 재누름 무시 → 재생 중 → 정지", async () => {
+  it("재생 → 대기 중 Space는 정지(play를 다시 부르지 않는다) → 다시 Space로 재생 → 재생 중 → 정지", async () => {
     const h = renderEditor({ playMode: "manual" });
     const play = h.fake.engine.play;
 
@@ -327,13 +327,23 @@ describe("Space — 재생/정지 토글", () => {
     expect(play).toHaveBeenCalledTimes(1);
     expect(h.studio().pending).toBe(true);
 
-    // 대기 중 재누름은 삼킨다(기본 동작 막음). play를 다시 부르지 않는다.
-    expect(space().defaultPrevented).toBe(true);
+    // 대기 중 Space는 정지한다(받기가 끝나지 않을 때의 탈출구). play를 다시 부르지 않는다.
     expect(space().defaultPrevented).toBe(true);
     expect(play).toHaveBeenCalledTimes(1);
-    expect(h.fake.engine.stop).not.toHaveBeenCalled();
-    expect(h.studio().pending).toBe(true);
+    expect(h.fake.engine.stop).toHaveBeenCalledTimes(1);
+    expect(h.studio().pending).toBe(false);
+    expect(h.studio().editable).toBe(true);
 
+    // 그 옛 play()가 뒤늦게 끝나도 화면은 정지 상태로 남는다.
+    await act(async () => {
+      h.fake.resolvePlay({ status: "playing" });
+    });
+    expect(h.studio().playing).toBe(false);
+
+    // 정지 뒤 Space는 새로 재생한다(대기). 이번 결과는 반영된다.
+    space();
+    expect(play).toHaveBeenCalledTimes(2);
+    expect(h.studio().pending).toBe(true);
     await act(async () => {
       h.fake.resolvePlay({ status: "playing" });
     });
@@ -342,13 +352,13 @@ describe("Space — 재생/정지 토글", () => {
 
     // 편집 불가(재생 중)에서도 Space는 정지한다.
     expect(space().defaultPrevented).toBe(true);
-    expect(h.fake.engine.stop).toHaveBeenCalledTimes(1);
+    expect(h.fake.engine.stop).toHaveBeenCalledTimes(2);
     expect(h.studio().playing).toBe(false);
     expect(h.studio().editable).toBe(true);
 
     // 정지 뒤에는 다시 재생된다.
     space();
-    expect(play).toHaveBeenCalledTimes(2);
+    expect(play).toHaveBeenCalledTimes(3);
   });
 
   it("body에 포커스가 있을 때 동작한다(target이 body)", () => {

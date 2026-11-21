@@ -3,6 +3,7 @@
 import { memo, useEffect, useRef, useState } from "react";
 
 import { chordLabel } from "@/lib/score/chords";
+import { splitSegment } from "@/lib/score/edit";
 import type { Chord, Song } from "@/lib/score/model";
 import type { StudioEdits } from "@/state/types";
 import { useStudio } from "@/state/useStudio";
@@ -62,6 +63,13 @@ const ChordLaneView = memo(function ChordLaneView({
   if (open && (!editable || !song.progression[open.index])) setOpen(null);
   const openSegment =
     open && editable ? song.progression[open.index] : undefined;
+
+  // 나누기 가능 여부는 편집 규칙(`splitSegment`)에 묻는다: 같은 참조가 돌아오면 no-op이다.
+  // 반마디 규칙을 여기서 다시 쓰지 않는다(손으로 고친 정렬 안 된 곡에서 어긋난다).
+  const splitTick = openSegment
+    ? openSegment.start + openSegment.length / 2
+    : 0;
+  const canSplit = openSegment ? splitSegment(song, splitTick) !== song : false;
 
   const close = (returnFocus: boolean) => {
     const index = open?.index;
@@ -147,9 +155,10 @@ const ChordLaneView = memo(function ChordLaneView({
           position={open.position}
           segment={openSegment}
           isLast={open.index === song.progression.length - 1}
+          canSplit={canSplit}
           onChange={change}
           onSplit={() => {
-            edit.splitSegment(openSegment.start + openSegment.length / 2);
+            edit.splitSegment(splitTick);
             close(true);
           }}
           onMerge={() => {

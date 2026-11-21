@@ -4,7 +4,6 @@ import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 
 import { ROOT_NAMES } from "@/lib/score/chords";
-import { SNAP_TICKS } from "@/lib/score/edit";
 import {
   CHORD_QUALITIES,
   type Chord,
@@ -37,6 +36,8 @@ export interface ChordPopoverProps {
   segment: ChordSegment;
   /** 마지막 구간이면 합치기가 없다. */
   isLast: boolean;
+  /** 가운데에서 나눌 수 있는가. 규칙은 `lib/score/edit.ts`의 `splitSegment`가 갖고 있다. */
+  canSplit: boolean;
   onChange(chord: Chord): void;
   onSplit(): void;
   onMerge(): void;
@@ -57,6 +58,7 @@ export function ChordPopover({
   position,
   segment,
   isLast,
+  canSplit,
   onChange,
   onSplit,
   onMerge,
@@ -118,7 +120,7 @@ export function ChordPopover({
         <button
           type="button"
           className={BUTTON}
-          disabled={segment.length < 2 * SNAP_TICKS}
+          disabled={!canSplit}
           onClick={onSplit}
         >
           가운데에서 나누기

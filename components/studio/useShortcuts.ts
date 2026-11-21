@@ -14,7 +14,7 @@ import { hasActiveGesture } from "./gestures";
  *
  * | 키 | 동작 | 조건 |
  * | --- | --- | --- |
- * | Space | 재생 중이면 `stop()`, 대기 중이면 삼킴(`play()` 안 부름), 아니면 `play()` | 반복 입력 무시. 아래 "Space와 네이티브" 대상 위에서는 처리 안 함 |
+ * | Space | 재생 중이거나 재생 대기 중이면 `stop()`, 아니면 `play()` | 반복 입력 무시. 아래 "Space와 네이티브" 대상 위에서는 처리 안 함 |
  * | Ctrl/Cmd+Z | `undo()` | `editable && canUndo`, 진행 중 드래그 없음. 텍스트 입력 위에서는 처리 안 함. Shift·Alt 변형은 처리 안 함. `key`가 z이거나 물리 키가 KeyZ |
  * | Delete / Backspace | 선택한 클립 삭제 | `editable`, 선택 있음. 텍스트 입력·select·대화상자 안에서는 처리 안 함 |
  * | Esc | 선택 해제 | 선택 있음 |
@@ -137,9 +137,10 @@ export function useShortcuts(): void {
         if (spaceBelongsToTarget(target)) return;
         spaceHandled = true;
         e.preventDefault();
-        if (studio.playing) studio.stop();
-        // 대기 중 재누름은 삼키되 play()는 다시 부르지 않는다.
-        else if (!studio.pending) void studio.play();
+        // 대기 중(샘플 받는 중)에도 정지한다: 받기가 끝나지 않을 때의 탈출구다. 그 뒤에 온
+        // 옛 play() 결과는 Provider의 세션 토큰이 버리므로 play()를 다시 부르지 않는다.
+        if (studio.playing || studio.pending) studio.stop();
+        else void studio.play();
         return;
       }
 

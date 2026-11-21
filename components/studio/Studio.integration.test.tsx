@@ -336,7 +336,7 @@ describe("4. 마디 추가·삭제", () => {
 });
 
 describe("5. 재생 중에는 편집할 수 없다", () => {
-  it("Space로 시작(대기, aria-busy) -> 재생 중 -> 편집 불가 -> Space로 정지 -> 최신 곡이 엔진에 간다", async () => {
+  it("Space로 시작(대기, 정지 버튼) -> 재생 중 -> 편집 불가 -> Space로 정지 -> 최신 곡이 엔진에 간다", async () => {
     const { fake, studio } = start({ playMode: "manual" });
     fireEvent.click(segment("Am"));
     pickRootF();
@@ -347,15 +347,14 @@ describe("5. 재생 중에는 편집할 수 없다", () => {
     // 시작: 엔진의 play()가 끝나기를 기다리는 동안.
     await pressSpace();
     expect(fake.engine.play).toHaveBeenCalledTimes(1);
-    const playButton = screen.getByRole("button", { name: "재생" });
-    expect(playButton.getAttribute("aria-busy")).toBe("true");
+    expect(screen.queryByRole("button", { name: "재생" })).toBeNull();
+    expect(screen.getByRole("button", { name: "정지" })).toBeTruthy();
     expect(studio().editable).toBe(false);
     expect(addBar()).toHaveProperty("disabled", true);
     fireEvent.click(segment("F"));
     expect(screen.queryByRole("dialog")).toBeNull();
     ctrlZ();
     expect(studio().song).toBe(edited);
-    await pressSpace(); // 대기 중 Space는 삼킨다
     expect(fake.engine.play).toHaveBeenCalledTimes(1);
 
     // 재생 중.
@@ -382,6 +381,32 @@ describe("5. 재생 중에는 편집할 수 없다", () => {
     // 다시 편집된다.
     fireEvent.click(segment("F"));
     expect(screen.getByRole("dialog", { name: "코드 선택" })).toBeTruthy();
+  });
+});
+
+describe("5b. 재생 대기 중에도 멈출 수 있다", () => {
+  it("대기 중 정지 버튼 -> 엔진 stop 한 번, 다시 편집 가능, 늦게 온 playing은 무시, 다시 재생 가능", async () => {
+    const { fake, studio } = start({ playMode: "manual" });
+    await pressSpace();
+    expect(studio().pending).toBe(true);
+    expect(addBar()).toHaveProperty("disabled", true);
+
+    fireEvent.click(screen.getByRole("button", { name: "정지" }));
+    expect(fake.engine.stop).toHaveBeenCalledTimes(1);
+    expect(studio().pending).toBe(false);
+    expect(studio().editable).toBe(true);
+    expect(addBar()).toHaveProperty("disabled", false);
+    expect(screen.getByRole("button", { name: "재생" })).toBeTruthy();
+
+    // 옛 play()가 뒤늦게 끝나도 재생 중으로 바뀌지 않는다.
+    await act(async () => fake.resolvePlay({ status: "playing" }));
+    expect(studio().playing).toBe(false);
+    expect(studio().editable).toBe(true);
+    expect(screen.queryByText("재생 중에는 편집할 수 없습니다")).toBeNull();
+
+    await pressSpace();
+    expect(fake.engine.play).toHaveBeenCalledTimes(2);
+    expect(studio().pending).toBe(true);
   });
 });
 

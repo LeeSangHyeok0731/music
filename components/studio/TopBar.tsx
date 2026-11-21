@@ -46,19 +46,17 @@ export function TopBar() {
   return (
     <header className="border-b border-white/10 bg-[#141519] text-sm text-zinc-200">
       <div className="flex flex-wrap items-center gap-x-5 gap-y-2 px-3 py-2">
-        {playing ? (
+        {playing || pending ? (
+          // 재생 대기(샘플 내려받기·디코드) 중에도 멈출 수 있어야 한다. 받기가 영영 끝나지
+          // 않아도 새로고침 말고 빠져나올 길이 있어야 해서다. 정지 버튼 하나만 보인다.
           <button type="button" onClick={stop} className={BUTTON}>
             정지
           </button>
         ) : (
           <button
             type="button"
-            aria-busy={pending ? "true" : undefined}
             disabled={!supported}
-            onClick={() => {
-              // 대기 중 재누름은 무시한다. Provider도 막지만 여기서 호출 자체를 하지 않는다.
-              if (!pending) void play();
-            }}
+            onClick={() => void play()}
             className={BUTTON}
           >
             재생

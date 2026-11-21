@@ -7,7 +7,10 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { AUTOSAVE_KEY, serializeSong } from "@/lib/score/autosave";
 import { buildDemoSong } from "@/lib/score/demo-song";
+import { splitSegment } from "@/lib/score/edit";
+import type { Song } from "@/lib/score/model";
 
 import { ChordLane } from "./ChordLane";
 import { Studio } from "./Studio";
@@ -422,6 +425,53 @@ describe("ChordLane 나누기·합치기", () => {
     }
     expect(h.studio().song.progression[0].length).toBe(960);
     fireEvent.click(segments()[0]);
+    expect(inDialog("가운데에서 나누기").hasAttribute("disabled")).toBe(true);
+  });
+
+  it("정렬되지 않은(손으로 고친) 구간에서 편집 규칙이 나누지 못하면 길이가 반마디 둘 이상이어도 나누기가 비활성이다", () => {
+    // Am: start 500, length 1920(= 반마디 둘). 가운데 1460은 1920으로 스냅되어 오른쪽이 500뿐이라 no-op이다.
+    const demo = buildDemoSong();
+    const song: Song = {
+      ...demo,
+      bars: 2,
+      progression: [
+        { start: 0, length: 500, chord: { root: 0, quality: "maj" } },
+        { start: 500, length: 1920, chord: { root: 9, quality: "min" } },
+        { start: 2420, length: 1420, chord: { root: 5, quality: "maj" } },
+      ],
+      tracks: demo.tracks.map((t) => ({ ...t, clips: [] })),
+    };
+    expect(splitSegment(song, 500 + 1920 / 2)).toBe(song); // 규칙: no-op
+    const h = renderLane({ stored: { [AUTOSAVE_KEY]: serializeSong(song) } });
+    expect(h.studio().song.progression).toHaveLength(3);
+
+    fireEvent.click(seg("Am"));
+    const split = inDialog("가운데에서 나누기");
+    expect(split.hasAttribute("disabled")).toBe(true);
+    fireEvent.click(split);
+    expect(h.studio().song.progression).toHaveLength(3);
+    expect(h.studio().canUndo).toBe(false);
+  });
+
+  it("나누기 가능 여부는 편집 규칙과 일치한다: 정렬된 곡의 모든 구간 길이에서 비활성 ⇔ splitSegment가 no-op", () => {
+    // 길이 1920(활성)·960(비활성) 경계. 반마디 길이 규칙을 컴포넌트가 따로 갖지 않는다.
+    const h = renderLane();
+    for (let i = 0; i < 2; i++) {
+      const first = h.studio().song.progression[0];
+      const noop =
+        splitSegment(h.studio().song, first.start + first.length / 2) ===
+        h.studio().song;
+      fireEvent.click(segments()[0]);
+      expect(inDialog("가운데에서 나누기").hasAttribute("disabled")).toBe(noop);
+      fireEvent.click(inDialog("가운데에서 나누기"));
+    }
+    fireEvent.click(segments()[0]);
+    const last = h.studio().song.progression[0];
+    expect(last.length).toBe(960);
+    expect(
+      splitSegment(h.studio().song, last.start + last.length / 2) ===
+        h.studio().song,
+    ).toBe(true);
     expect(inDialog("가운데에서 나누기").hasAttribute("disabled")).toBe(true);
   });
 

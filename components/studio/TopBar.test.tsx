@@ -45,7 +45,6 @@ describe("TopBar 재생·정지", () => {
   it("멈춘 상태: 재생 버튼만 있고 활성이며 안내문이 없다", () => {
     renderWithStudio(<TopBar />);
     expect(playButton().hasAttribute("disabled")).toBe(false);
-    expect(playButton().getAttribute("aria-busy")).not.toBe("true");
     expect(screen.queryByRole("button", { name: "정지" })).toBeNull();
     expect(screen.queryByText("재생 중에는 편집할 수 없습니다")).toBeNull();
     expect(screen.queryByText("샘플을 불러오는 중…")).toBeNull();
@@ -73,18 +72,15 @@ describe("TopBar 재생·정지", () => {
     expect(screen.queryByText("재생 중에는 편집할 수 없습니다")).toBeNull();
   });
 
-  it("시작 대기 중: 재생은 비활성이 아니라 aria-busy이고, 다시 눌러도 play는 한 번이며, 정지 버튼은 없다", async () => {
+  it("시작 대기 중: 재생 버튼 대신 정지 버튼 하나만 보이고(재생은 없다), play는 한 번뿐이다", async () => {
     const { fake } = renderWithStudio(<TopBar />, { playMode: "manual" });
     await clickPlay();
 
-    expect(playButton().textContent).toBe("재생");
-    expect(playButton().hasAttribute("disabled")).toBe(false);
-    expect(playButton().getAttribute("aria-busy")).toBe("true");
+    expect(stopButton().hasAttribute("disabled")).toBe(false);
+    expect(screen.queryByRole("button", { name: "재생" })).toBeNull();
+    expect(screen.getAllByRole("button", { name: /재생|정지/ })).toHaveLength(1);
     expect(screen.getByText("샘플을 불러오는 중…")).toBeTruthy();
     expect(screen.queryByText("재생 중에는 편집할 수 없습니다")).toBeNull();
-    expect(screen.queryByRole("button", { name: "정지" })).toBeNull();
-
-    await clickPlay();
     expect(fake.engine.play).toHaveBeenCalledTimes(1);
 
     await act(async () => {
@@ -92,6 +88,32 @@ describe("TopBar 재생·정지", () => {
     });
     expect(stopButton()).toBeTruthy();
     expect(screen.queryByText("샘플을 불러오는 중…")).toBeNull();
+    expect(fake.engine.play).toHaveBeenCalledTimes(1);
+  });
+
+  it("시작 대기 중 정지를 누르면 엔진 stop이 한 번 불리고 재생 버튼으로 돌아오며, 늦게 온 playing 결과는 무시된다", async () => {
+    const { fake, studio } = renderWithStudio(<TopBar />, { playMode: "manual" });
+    await clickPlay();
+    expect(studio().pending).toBe(true);
+
+    act(() => {
+      fireEvent.click(stopButton());
+    });
+    expect(fake.engine.stop).toHaveBeenCalledTimes(1);
+    expect(studio().pending).toBe(false);
+    expect(studio().editable).toBe(true);
+    expect(playButton().hasAttribute("disabled")).toBe(false);
+    expect(screen.queryByRole("button", { name: "정지" })).toBeNull();
+    expect(screen.queryByText("샘플을 불러오는 중…")).toBeNull();
+
+    // 옛 play()가 뒤늦게 playing으로 끝나도(가짜 엔진은 강제하지 않는다) 화면은 정지 상태다.
+    await act(async () => {
+      fake.resolvePlay({ status: "playing" });
+    });
+    expect(studio().playing).toBe(false);
+    expect(playButton()).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "정지" })).toBeNull();
+    expect(fake.engine.play).toHaveBeenCalledTimes(1);
   });
 
   it("not-ready로 돌아오면 재생 버튼이 돌아오고 이유가 메시지 줄에 보인다", async () => {
@@ -101,7 +123,6 @@ describe("TopBar 재생·정지", () => {
     });
     await clickPlay();
 
-    expect(playButton().getAttribute("aria-busy")).not.toBe("true");
     expect(screen.queryByRole("button", { name: "정지" })).toBeNull();
     expect(
       within(screen.getByRole("alert")).getByText(/재생하지 않았습니다.*피아노/),
