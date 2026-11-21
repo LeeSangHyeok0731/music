@@ -514,8 +514,10 @@ describe("planResizeNotes", () => {
 
   it("D(길이 960), -480 / -960: 길이 480 / 하한으로 클램프 → 480", () => {
     const song = base();
-    expect(len(run(song, (s) => planResizeNotes(s, T, K, ["960:60"], -480, "1/4")).song, "960:60")).toBe(480);
-    expect(len(run(song, (s) => planResizeNotes(s, T, K, ["960:60"], -960, "1/4")).song, "960:60")).toBe(480);
+    for (const d of [-480, -960]) {
+      const r = run(song, (s) => planResizeNotes(s, T, K, ["960:60"], d, "1/4"));
+      expect(len(r.song, "960:60"), String(d)).toBe(480);
+    }
   });
 
   it("[A, D], +480 / +960: 덩어리 상한 480 → A 960, D 1440", () => {
@@ -566,8 +568,13 @@ describe("planResizeNotes", () => {
     // A(0..480)의 다음 같은 음높이가 240에 있다(손으로 고친 곡): maxLen 240 < 길이 480.
     // 다른 선택 음 E(1920..2160)의 하한은 480-240=240 > A의 상한 240-480 → 상한<하한.
     const song = base([A, n(240, 240, 60), n(1920, 240, 62)]);
-    const r = planResizeNotes(song, T, K, ["0:60", "1920:62"], 480, "1/4");
-    expect(r.song).toBe(song);
+    // +480·−480 둘 다: −480은 상한·하한만 보면 −240으로 클램프돼 방향이 맞으므로
+    // 상한<하한 검사만이 거부한다.
+    for (const d of [480, -480]) {
+      const r = planResizeNotes(song, T, K, ["0:60", "1920:62"], d, "1/4");
+      expect(r.song, String(d)).toBe(song);
+      expect(r.keys).toEqual(["0:60", "1920:62"]);
+    }
   });
 
   it('낡은 키만 있으면 no-op, keys=[]', () => {
@@ -635,8 +642,10 @@ describe("planSetVelocities", () => {
     expect(again.song).toBe(r.song);
     expect(again.keys).toEqual(["0:60"]);
 
-    expect(notesOf(run(song, (s) => planSetVelocities(s, T, K, ["0:60"], 2)).song)[0].velocity).toBe(1);
-    expect(notesOf(run(song, (s) => planSetVelocities(s, T, K, ["0:60"], 0)).song)[0].velocity).toBe(0.05);
+    const velocityAfter = (v: number) =>
+      notesOf(run(song, (s) => planSetVelocities(s, T, K, ["0:60"], v)).song)[0].velocity;
+    expect(velocityAfter(2)).toBe(1);
+    expect(velocityAfter(0)).toBe(0.05);
     const nan = planSetVelocities(song, T, K, ["0:60"], Number.NaN);
     expect(nan.song).toBe(song);
     expect(nan.keys).toEqual(["0:60"]);
@@ -743,9 +752,21 @@ describe("bakeClipToNotes", () => {
     const song = songWithPatterns({
       bars: 4,
       tracks: [
-        { id: "d", instrument: "drums", clips: [{ id: K, start: 960, length: 2880, pattern: "drum-basic-rock" }] },
-        { id: "g", instrument: "guitar", clips: [{ id: K, start: 0, length: 1000, pattern: "guitar-strum-quarter" }] },
-        { id: "b", instrument: "bass", clips: [{ id: K, start: 1920, length: 3840, pattern: "bass-root-fifth" }] },
+        {
+          id: "d",
+          instrument: "drums",
+          clips: [{ id: K, start: 960, length: 2880, pattern: "drum-basic-rock" }],
+        },
+        {
+          id: "g",
+          instrument: "guitar",
+          clips: [{ id: K, start: 0, length: 1000, pattern: "guitar-strum-quarter" }],
+        },
+        {
+          id: "b",
+          instrument: "bass",
+          clips: [{ id: K, start: 1920, length: 3840, pattern: "bass-root-fifth" }],
+        },
       ],
     });
     let baked = song;
@@ -773,7 +794,11 @@ describe("emptyNotesClip", () => {
             { id: "clip-2", start: 1920, length: 960, pattern: "piano-block" },
           ],
         },
-        { id: "d", instrument: "drums", clips: [{ id: K, start: 0, length: 1920, pattern: "drum-basic-rock" }] },
+        {
+          id: "d",
+          instrument: "drums",
+          clips: [{ id: K, start: 0, length: 1920, pattern: "drum-basic-rock" }],
+        },
       ],
     });
     const snapshot = structuredClone(song);
@@ -983,7 +1008,12 @@ function runProperty(
           }
           case "box": {
             const s = tick();
-            const box = { startTick: s, endTick: s + int(0, 3000), loPitch: int(20, 90), hiPitch: int(40, 110) };
+            const box = {
+              startTick: s,
+              endTick: s + int(0, 3000),
+              loPitch: int(20, 90),
+              hiPitch: int(40, 110),
+            };
             const selected = selectNotesInBox(prev, trackId, clipId, box);
             const present = new Set(existing.map(noteKey));
             expect(selected.filter((k) => !present.has(k))).toEqual([]);
@@ -1025,7 +1055,8 @@ function runProperty(
 
       // 돌려준 키는 결과 클립에 실제로 있는 음이다.
       if (planKeys && planKeys.length > 0) {
-        const after = song.tracks.find((t) => t.id === trackId)!.clips.find((c) => c.id === clipId)!;
+        const afterTrack = song.tracks.find((t) => t.id === trackId)!;
+        const after = afterTrack.clips.find((c) => c.id === clipId)!;
         const afterNotes = (after.body as NotesBody).notes;
         const present = new Set(afterNotes.map(noteKey));
         expect(planKeys.filter((k) => !present.has(k)), `${op} 결과에 없는 키`).toEqual([]);
