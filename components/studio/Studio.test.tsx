@@ -1,4 +1,11 @@
-import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { songLengthTicks } from "@/lib/score/time";
@@ -43,9 +50,11 @@ describe("Studio", () => {
 
     expect(song.tracks).toHaveLength(4);
     const ruler = screen.getByTestId("ruler");
-    expect(within(ruler).getAllByText(/^\d+$/).map((e) => e.textContent)).toEqual(
-      Array.from({ length: song.bars }, (_, i) => String(i + 1)),
-    );
+    expect(
+      within(ruler)
+        .getAllByText(/^\d+$/)
+        .map((e) => e.textContent),
+    ).toEqual(Array.from({ length: song.bars }, (_, i) => String(i + 1)));
     expect(song.bars).toBe(8);
   });
 
@@ -57,7 +66,9 @@ describe("Studio", () => {
       headers.getAllByTestId(/^track-header-/).map((e) => e.textContent),
     ).toEqual(["피아노", "기타", "베이스", "드럼"]);
     expect(headers.getByText("코드")).toBeTruthy();
-    expect(screen.getByTestId("track-headers").style.width).toBe(`${HEADER_WIDTH}px`);
+    expect(screen.getByTestId("track-headers").style.width).toBe(
+      `${HEADER_WIDTH}px`,
+    );
   });
 
   it("타임라인 폭은 bars × PX_PER_BAR이고 스크롤 영역 클래스를 가진다", () => {
@@ -71,13 +82,17 @@ describe("Studio", () => {
 
   it("4/4의 박 구분선은 마디당 4개다", () => {
     const { studio } = renderWithStudio(<Studio />);
-    const lines = screen.getByTestId("timeline").querySelectorAll("[data-beat-line]");
+    const lines = screen
+      .getByTestId("timeline")
+      .querySelectorAll("[data-beat-line]");
     expect(lines).toHaveLength(studio().song.bars * 4);
   });
 
   it("코드 레인과 트랙 레인 자리가 헤더와 같은 높이 상수로 놓인다", () => {
     const { studio } = renderWithStudio(<Studio />);
-    expect(screen.getByTestId("chord-lane").style.height).toBe(`${CHORD_LANE_HEIGHT}px`);
+    expect(screen.getByTestId("chord-lane").style.height).toBe(
+      `${CHORD_LANE_HEIGHT}px`,
+    );
     expect(screen.getByTestId("chord-lane-header").style.height).toBe(
       `${CHORD_LANE_HEIGHT}px`,
     );
@@ -113,12 +128,69 @@ describe("Studio", () => {
     const length = songLengthTicks(studio().song);
     fake.engine.currentTick.mockReturnValue(length + 999);
     act(() => frames.splice(0).forEach((cb) => cb(0)));
-    expect(playhead.style.transform).toBe(`translateX(${tickToX(length - 1)}px)`);
+    expect(playhead.style.transform).toBe(
+      `translateX(${tickToX(length - 1)}px)`,
+    );
 
     act(() => {
       fireEvent.click(screen.getByRole("button", { name: "정지" }));
     });
     expect(playhead.style.transform).toBe("translateX(0px)");
+  });
+});
+
+describe("Studio 스크롤 구조", () => {
+  // jsdom은 레이아웃을 못 하므로 구조(클래스·부모 관계)를 고정한다.
+  const verticalScrollers = (root: HTMLElement) =>
+    Array.from(root.querySelectorAll<HTMLElement>("*")).filter((el) =>
+      /(^|\s)overflow-y-(auto|scroll)(\s|$)/.test(el.className),
+    );
+
+  it("세로 스크롤 소유자는 바깥 래퍼 하나뿐이다", () => {
+    const { container } = renderWithStudio(<Studio />);
+    const owner = screen.getByTestId("body-scroll");
+    expect(owner.className).toContain("overflow-y-auto");
+    expect(verticalScrollers(container)).toEqual([owner]);
+  });
+
+  it("타임라인은 가로만 스크롤하고 세로로는 스크롤하지 않는다", () => {
+    renderWithStudio(<Studio />);
+    const timeline = screen.getByTestId("timeline");
+    expect(timeline.className).toContain("overflow-x-auto");
+    expect(timeline.className).toContain("overflow-y-hidden");
+    expect(timeline.style.overflowY).not.toMatch(/auto|scroll/);
+  });
+
+  it("헤더 열과 타임라인은 같은 body-columns flex 래퍼의 자식이고 그 래퍼가 스크롤 래퍼 안에 있다", () => {
+    renderWithStudio(<Studio />);
+    const columns = screen.getByTestId("body-columns");
+    expect(columns.className).toContain("flex");
+    expect(columns.className).toContain("min-h-full");
+    expect(screen.getByTestId("track-headers").parentElement).toBe(columns);
+    expect(screen.getByTestId("timeline").parentElement).toBe(columns);
+    expect(columns.parentElement).toBe(screen.getByTestId("body-scroll"));
+  });
+
+  it("앱 셸은 h-dvh이고 세로 스크롤하지 않는다", () => {
+    const { container } = renderWithStudio(<Studio />);
+    const shell = container.firstElementChild as HTMLElement;
+    expect(shell.className).toContain("h-dvh");
+    expect(shell.className).not.toMatch(/overflow-y-(auto|scroll)/);
+  });
+
+  it("플레이헤드는 타임라인 스테이지 안에서 위아래로 꽉 찬다", () => {
+    renderWithStudio(<Studio />);
+    const playhead = screen.getByTestId("playhead");
+    expect(playhead.parentElement).toBe(screen.getByTestId("stage"));
+    expect(playhead.className).toContain("top-0");
+    expect(playhead.className).toContain("bottom-0");
+  });
+
+  it("헤더 열의 눈금 칸은 눈금자와 같은 높이다", () => {
+    renderWithStudio(<Studio />);
+    const spacer = screen.getByTestId("ruler-spacer");
+    expect(spacer.style.height).toBe(`${RULER_HEIGHT}px`);
+    expect(spacer.style.height).toBe(screen.getByTestId("ruler").style.height);
   });
 });
 
@@ -150,13 +222,8 @@ describe("BeatGrid", () => {
       `${PX_PER_BAR + PX_PER_BAR / 3}px`,
       `${PX_PER_BAR + (PX_PER_BAR * 2) / 3}px`,
     ]);
-    expect(Array.from(lines).map((l) => l.hasAttribute("data-bar-line"))).toEqual([
-      true,
-      false,
-      false,
-      true,
-      false,
-      false,
-    ]);
+    expect(
+      Array.from(lines).map((l) => l.hasAttribute("data-bar-line")),
+    ).toEqual([true, false, false, true, false, false]);
   });
 });

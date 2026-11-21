@@ -30,65 +30,77 @@ export function Studio() {
   return (
     <div className="flex h-dvh flex-col bg-[#0b0c0f] text-zinc-200">
       <TopBar />
-      <div className="timeline-scroll flex min-h-0 flex-1 overflow-y-auto">
-        <div
-          data-testid="track-headers"
-          className="shrink-0 border-r border-white/10 bg-[#141519] text-sm"
-          style={{ width: HEADER_WIDTH }}
-        >
-          <div style={{ height: RULER_HEIGHT, boxShadow: ROW_DIVIDER }} />
+      {/* 세로 스크롤 소유자는 이 래퍼 하나다. 두 열은 body-columns 안에서 함께 늘어난다. */}
+      <div
+        data-testid="body-scroll"
+        className="timeline-scroll min-h-0 flex-1 overflow-y-auto"
+      >
+        <div data-testid="body-columns" className="flex min-h-full">
           <div
-            data-testid="chord-lane-header"
-            className="flex items-center px-3 text-zinc-400"
-            style={{ height: CHORD_LANE_HEIGHT, boxShadow: ROW_DIVIDER }}
+            data-testid="track-headers"
+            className="shrink-0 border-r border-white/10 bg-[#141519] text-sm"
+            style={{ width: HEADER_WIDTH }}
           >
-            코드
-          </div>
-          {song.tracks.map((track) => (
             <div
-              key={track.id}
-              data-testid={`track-header-${track.id}`}
-              className="flex items-center gap-2 px-3 text-zinc-200"
-              style={{ height: TRACK_LANE_HEIGHT, boxShadow: ROW_DIVIDER }}
-            >
-              <span
-                aria-hidden
-                className={`size-2 shrink-0 rounded-full ${INSTRUMENT_DOT[track.instrument]}`}
-              />
-              {INSTRUMENT_LABEL[track.instrument]}
-            </div>
-          ))}
-        </div>
-
-        <div
-          data-testid="timeline"
-          className="timeline-scroll min-w-0 flex-1 overflow-x-auto"
-        >
-          <div
-            data-testid="stage"
-            className="relative min-h-full"
-            style={{ width: song.bars * PX_PER_BAR, minWidth: "100%" }}
-          >
-            <BeatGrid bars={song.bars} beatsPerBar={song.timeSignature[0]} />
-            <div className="relative z-10">
-              <Ruler bars={song.bars} />
-              <div
-                data-testid="chord-lane"
-                style={{ height: CHORD_LANE_HEIGHT, boxShadow: ROW_DIVIDER }}
-              />
-              {song.tracks.map((track) => (
-                <div
-                  key={track.id}
-                  data-testid={`track-lane-${track.id}`}
-                  style={{ height: TRACK_LANE_HEIGHT, boxShadow: ROW_DIVIDER }}
-                />
-              ))}
-            </div>
-            <Playhead
-              engine={getEngine()}
-              playing={playing}
-              lengthTicks={songLengthTicks(song)}
+              data-testid="ruler-spacer"
+              style={{ height: RULER_HEIGHT, boxShadow: ROW_DIVIDER }}
             />
+            <div
+              data-testid="chord-lane-header"
+              className="flex items-center px-3 text-zinc-400"
+              style={{ height: CHORD_LANE_HEIGHT, boxShadow: ROW_DIVIDER }}
+            >
+              코드
+            </div>
+            {song.tracks.map((track) => (
+              <div
+                key={track.id}
+                data-testid={`track-header-${track.id}`}
+                className="flex items-center gap-2 px-3 text-zinc-200"
+                style={{ height: TRACK_LANE_HEIGHT, boxShadow: ROW_DIVIDER }}
+              >
+                <span
+                  aria-hidden
+                  className={`size-2 shrink-0 rounded-full ${INSTRUMENT_DOT[track.instrument]}`}
+                />
+                {INSTRUMENT_LABEL[track.instrument]}
+              </div>
+            ))}
+          </div>
+
+          <div
+            data-testid="timeline"
+            className="timeline-scroll min-w-0 flex-1 overflow-x-auto overflow-y-hidden"
+          >
+            <div
+              data-testid="stage"
+              className="relative min-h-full"
+              style={{ width: song.bars * PX_PER_BAR, minWidth: "100%" }}
+            >
+              <BeatGrid bars={song.bars} beatsPerBar={song.timeSignature[0]} />
+              <div className="relative z-10">
+                <Ruler bars={song.bars} />
+                <div
+                  data-testid="chord-lane"
+                  style={{ height: CHORD_LANE_HEIGHT, boxShadow: ROW_DIVIDER }}
+                />
+                {song.tracks.map((track) => (
+                  <div
+                    key={track.id}
+                    data-testid={`track-lane-${track.id}`}
+                    style={{
+                      height: TRACK_LANE_HEIGHT,
+                      boxShadow: ROW_DIVIDER,
+                    }}
+                  />
+                ))}
+              </div>
+              <Playhead
+                engine={getEngine()}
+                playing={playing}
+                lengthTicks={songLengthTicks(song)}
+              />
+            </div>
           </div>
         </div>
       </div>

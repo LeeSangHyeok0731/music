@@ -112,7 +112,9 @@ describe("TopBar 재생·정지", () => {
     removeAudioContextStub();
     const { fake } = renderWithStudio(<TopBar />);
 
-    expect(screen.getByText(/Web Audio를 지원하지 않습니다/)).toBeTruthy();
+    expect(screen.getByRole("alert").textContent).toContain(
+      "Web Audio를 지원하지 않습니다",
+    );
     expect(playButton().hasAttribute("disabled")).toBe(true);
     fireEvent.click(playButton());
     expect(fake.engine.play).not.toHaveBeenCalled();
@@ -121,6 +123,7 @@ describe("TopBar 재생·정지", () => {
   it("지원하는 브라우저에는 경고가 없다", () => {
     renderWithStudio(<TopBar />);
     expect(screen.queryByText(/Web Audio를 지원하지 않습니다/)).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 });
 

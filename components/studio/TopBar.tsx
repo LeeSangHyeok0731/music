@@ -78,6 +78,7 @@ export function TopBar() {
             value={song.tempo}
             onChange={(e) => {
               const bpm = parseTempoInput(e.target.value);
+              // 방어용: 실제 range 입력은 NaN을 내지 않는다. 오면 곡 템포를 건드리지 않는다.
               if (bpm !== null) setTempo(bpm);
             }}
           />
@@ -110,7 +111,7 @@ export function TopBar() {
       </div>
 
       {!supported && (
-        <p role="status" className="px-3 pb-2 text-amber-400">
+        <p role="alert" className="px-3 pb-2 text-amber-400">
           이 브라우저는 Web Audio를 지원하지 않습니다.
         </p>
       )}

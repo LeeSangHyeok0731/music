@@ -65,23 +65,28 @@ describe("installPointerCaptureStubs", () => {
       "setPointerCapture",
     );
     const restore = installPointerCaptureStubs();
-    const el = document.createElement("div");
+    try {
+      const el = document.createElement("div");
 
-    expect(el.hasPointerCapture(1)).toBe(false);
-    el.setPointerCapture(1);
-    expect(el.hasPointerCapture(1)).toBe(true);
-    expect(el.hasPointerCapture(2)).toBe(false);
-    el.releasePointerCapture(1);
-    expect(el.hasPointerCapture(1)).toBe(false);
+      expect(el.hasPointerCapture(1)).toBe(false);
+      el.setPointerCapture(1);
+      expect(el.hasPointerCapture(1)).toBe(true);
+      expect(el.hasPointerCapture(2)).toBe(false);
+      el.releasePointerCapture(1);
+      expect(el.hasPointerCapture(1)).toBe(false);
 
-    const spy = vi.spyOn(HTMLElement.prototype, "setPointerCapture");
-    el.setPointerCapture(5);
-    expect(spy).toHaveBeenCalledWith(5);
-    spy.mockRestore();
-
-    restore();
+      const spy = vi.spyOn(HTMLElement.prototype, "setPointerCapture");
+      el.setPointerCapture(5);
+      expect(spy).toHaveBeenCalledWith(5);
+      spy.mockRestore();
+    } finally {
+      restore();
+    }
     expect(
-      Object.getOwnPropertyDescriptor(HTMLElement.prototype, "setPointerCapture"),
+      Object.getOwnPropertyDescriptor(
+        HTMLElement.prototype,
+        "setPointerCapture",
+      ),
     ).toEqual(before);
   });
 });
