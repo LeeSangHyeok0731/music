@@ -164,7 +164,7 @@ export function lengthLabel(ticks: number): string {
 
 /**
  * 처음 열 때의 세로 스크롤 위치. 음이 있으면 음높이 범위의 가운데, 없으면 C4(60) 행이
- * 코드 띠 아래 보이는 영역의 가운데에 오게 한다. 0 아래로는 내리지 않는다.
+ * 코드 띠·세기 레인을 뺀 보이는 영역의 가운데에 오게 한다. 0 아래로는 내리지 않는다.
  */
 export function initialScrollTop(
   notes: readonly Pick<Note, "pitch">[],
@@ -181,9 +181,12 @@ export function initialScrollTop(
     }
     center = (lo + top) / 2;
   }
+  // 위 코드 띠(sticky top)와 아래 세기 레인(sticky bottom)이 스크롤 영역 위·아래를 가린다.
   const visible = Math.max(
     0,
-    (Number.isFinite(viewportHeight) ? viewportHeight : 0) - ROLL_CHORD_STRIP_HEIGHT,
+    (Number.isFinite(viewportHeight) ? viewportHeight : 0) -
+      ROLL_CHORD_STRIP_HEIGHT -
+      VELOCITY_LANE_HEIGHT,
   );
   const y = pitchToY(center, hi) + ROW_HEIGHT / 2 - visible / 2;
   return Math.max(0, y);

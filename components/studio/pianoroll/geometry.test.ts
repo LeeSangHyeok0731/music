@@ -245,10 +245,11 @@ describe("lengthLabel", () => {
 });
 
 describe("initialScrollTop", () => {
-  const strip = ROLL_CHORD_STRIP_HEIGHT;
+  // 위 코드 띠와 아래 세기 레인이 보이는 영역을 가린다.
+  const strip = ROLL_CHORD_STRIP_HEIGHT + VELOCITY_LANE_HEIGHT;
 
   it("음이 없으면 C4(60) 행을 보이는 영역 가운데에 둔다", () => {
-    // hi 96: C4 행 top 720, 가운데 730. 보이는 높이 400(띠 제외 376)이면 730 - 188
+    // hi 96: C4 행 top 720, 가운데 730. 보이는 높이 400(띠·레인 제외 296)이면 730 - 148
     expect(initialScrollTop([], 96, 400)).toBe(
       pitchToY(60, 96) + ROW_HEIGHT / 2 - (400 - strip) / 2,
     );
