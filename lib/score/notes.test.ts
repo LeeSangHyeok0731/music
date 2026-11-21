@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { addClip } from "@/lib/score/edit";
 import { expandSong } from "@/lib/score/expand";
 import type {
   ChordSegment,
@@ -13,6 +14,7 @@ import {
   GRID_UNITS,
   MIN_VELOCITY,
   PITCH_RANGE,
+  addEmptyNotesClip,
   addNote,
   bakeClipToNotes,
   displayRange,
@@ -817,6 +819,75 @@ describe("emptyNotesClip", () => {
   it("notes 클립: no-op(같은 참조)", () => {
     const song = base();
     expect(emptyNotesClip(song, T, K)).toBe(song);
+  });
+});
+
+describe("addEmptyNotesClip", () => {
+  const gap = () =>
+    songWithPatterns({
+      bars: 4,
+      tracks: [
+        {
+          id: T,
+          instrument: "piano",
+          clips: [
+            { id: "clip-1", start: 0, length: 1920, pattern: "piano-block" },
+          ],
+        },
+        {
+          id: "d",
+          instrument: "drums",
+          clips: [
+            { id: "drum-1", start: 0, length: 1920, pattern: "drum-basic-rock" },
+          ],
+        },
+      ],
+    });
+
+  it("빈 칸: addClip과 같은 자리·길이의 빈 음 클립을 한 번에 만든다", () => {
+    const song = gap();
+    const snapshot = structuredClone(song);
+    const r = addEmptyNotesClip(song, T, 3000);
+    expectValidAndInputUntouched(song, snapshot, r);
+    // 3000틱이 든 반마디 칸(2880)에 기본 1마디(1920) — 곡 끝(7680)까지 여유 있음.
+    expect(r.tracks[0].clips).toHaveLength(2);
+    expect(r.tracks[0].clips[1]).toEqual({
+      id: "clip-2",
+      start: 2880,
+      length: 1920,
+      body: { type: "notes", notes: [] },
+    });
+    expect(r.tracks[0].clips[0]).toBe(song.tracks[0].clips[0]);
+    expect(r.tracks[1]).toBe(song.tracks[1]);
+  });
+
+  it("addClip + emptyNotesClip 합성과 결과가 같다", () => {
+    const song = gap();
+    const added = addClip(song, T, 3000);
+    const id = added.tracks[0].clips.find((c) => c.id === "clip-2")!.id;
+    expect(addEmptyNotesClip(song, T, 3000)).toEqual(
+      emptyNotesClip(added, T, id),
+    );
+  });
+
+  it("자리가 없으면(이미 클립 위) 같은 참조", () => {
+    const song = gap();
+    expect(addEmptyNotesClip(song, T, 100)).toBe(song);
+  });
+
+  it("곡 끝 뒤·음수·NaN은 같은 참조", () => {
+    const song = gap();
+    expect(addEmptyNotesClip(song, T, 99999)).toBe(song);
+    expect(addEmptyNotesClip(song, T, -5)).toBe(song);
+    expect(addEmptyNotesClip(song, T, Number.NaN)).toBe(song);
+  });
+
+  it("드럼 트랙은 Error(자리가 있어도)", () => {
+    expect(() => addEmptyNotesClip(gap(), "d", 3000)).toThrow(Error);
+  });
+
+  it("없는 트랙은 Error", () => {
+    expect(() => addEmptyNotesClip(gap(), "nope", 3000)).toThrow(Error);
   });
 });
 

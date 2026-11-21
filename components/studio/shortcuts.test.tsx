@@ -387,6 +387,28 @@ describe("Space — 재생/정지 토글", () => {
     expect(h.fake.engine.play).not.toHaveBeenCalled();
   });
 
+  it("aria-modal 대화상자(피아노롤) 안에서는 Space가 재생하고, aria-modal 없는 대화상자 안에서는 네이티브에 맡긴다", () => {
+    const h = renderEditor();
+    // aria-modal 없는 대화상자(팝오버 같은 것): 처리하지 않는다.
+    const plain = space(screen.getByTestId("in-dialog"));
+    expect(plain.defaultPrevented).toBe(false);
+    expect(h.fake.engine.play).not.toHaveBeenCalled();
+
+    const modal = document.createElement("div");
+    modal.setAttribute("role", "dialog");
+    modal.setAttribute("aria-modal", "true");
+    const inner = document.createElement("div");
+    modal.append(inner);
+    document.body.append(modal);
+    try {
+      const ev = space(inner);
+      expect(ev.defaultPrevented).toBe(true);
+      expect(h.fake.engine.play).toHaveBeenCalledTimes(1);
+    } finally {
+      modal.remove();
+    }
+  });
+
   it.each(NATIVE_TARGETS)(
     "%s 위에서는 포커스 방식과 무관하게 처리하지 않는다(네이티브 동작에 맡긴다)",
     (_name, getTarget) => {

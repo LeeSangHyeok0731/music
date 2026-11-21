@@ -110,6 +110,7 @@ describe("2. 편집과 실행취소", () => {
     expect(Object.keys(api().edit).sort()).toEqual(
       [
         "addClip",
+        "addEmptyNotesClip",
         "bakeClipToNotes",
         "emptyNotesClip",
         "mergeSegments",
@@ -138,6 +139,22 @@ describe("2. 편집과 실행취소", () => {
     ]);
     expect(typeof api().edit.bakeClipToNotes).toBe("function");
     expect(typeof api().edit.emptyNotesClip).toBe("function");
+    expect(typeof api().edit.addEmptyNotesClip).toBe("function");
+  });
+
+  it("addEmptyNotesClip은 빈 음 클립을 만들고 되돌리기 한 번으로 클립째 사라진다", () => {
+    const { api } = setup();
+    const piano = api().song.tracks.find((t) => t.instrument === "piano")!;
+    const last = piano.clips.at(-1)!;
+    act(() => api().edit.removeClip(piano.id, last.id)); // 빈 자리를 만든다
+    const emptied = api().song;
+    act(() => api().edit.addEmptyNotesClip(piano.id, last.start));
+    const added = api()
+      .song.tracks.find((t) => t.id === piano.id)!
+      .clips.find((c) => c.start === last.start);
+    expect(added?.body).toEqual({ type: "notes", notes: [] });
+    act(() => api().undo()); // 한 번이면 패턴 클립이 아니라 클립 자체가 사라진다
+    expect(api().song).toBe(emptied);
   });
 
   it("편집이 곡을 바꾸고 canUndo가 참이 되며 undo가 되돌린다", () => {

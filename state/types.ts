@@ -66,6 +66,8 @@ export type StudioEdits = { [K in EditName]: WithoutSong<(typeof Edit)[K]> } & {
   bakeClipToNotes: WithoutSong<typeof Notes.bakeClipToNotes>;
   /** `pattern` 클립을 같은 자리의 빈 `notes` 클립으로 바꾼다. */
   emptyNotesClip: WithoutSong<typeof Notes.emptyNotesClip>;
+  /** 빈 칸에 빈 `notes` 클립을 만든다(`addClip`과 같은 자리·길이). 실행취소 한 칸. 드럼 트랙은 던진다. */
+  addEmptyNotesClip: WithoutSong<typeof Notes.addEmptyNotesClip>;
   notes: StudioNoteEdits;
 };
 

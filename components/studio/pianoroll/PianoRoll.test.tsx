@@ -243,6 +243,16 @@ describe("진입점", () => {
     expect(queryRoll()).toBeNull();
   });
 
+  it("빈 칸 Shift+클릭은 되돌리기 한 번으로 클립째 사라진다(기록 한 칸)", () => {
+    const h = renderStudio();
+    const before = h.studio().song;
+    pointerClick(screen.getByTestId(`track-lane-${PIANO}`), xAt(6000), true);
+    expect(h.studio().song).not.toBe(before);
+    act(() => h.studio().undo());
+    expect(h.studio().song).toBe(before);
+    expect(h.studio().canUndo).toBe(false);
+  });
+
   it("Shift 없는 빈 칸 클릭은 패턴 클립이고, 드럼 Shift+클릭도 패턴 클립이다", () => {
     const h = renderStudio();
     const before = h.studio().song.tracks[0].clips.map((c) => c.id);
@@ -286,6 +296,17 @@ describe("모달 열림·닫힘·포커스", () => {
     renderStudio();
     fireEvent.doubleClick(body("n1"));
     fireEvent.click(within(roll()).getByRole("button", { name: "← 돌아가기" }));
+    expect(document.activeElement).toBe(body("n1"));
+  });
+
+  it("연 요소가 사라졌으면(선택 해제로 음 편집 버튼 제거) 닫을 때 클립 본문 버튼으로 돌아온다", () => {
+    const h = renderStudio();
+    openN1();
+    const opener = within(tile("n1")).getByRole("button", { name: "음 편집" });
+    act(() => h.studio().select(null)); // 편집 버튼은 선택된 클립에만 있다
+    expect(opener.isConnected).toBe(false);
+    fireEvent.click(within(roll()).getByRole("button", { name: "← 돌아가기" }));
+    expect(queryRoll()).toBeNull();
     expect(document.activeElement).toBe(body("n1"));
   });
 
@@ -625,7 +646,7 @@ describe("본문", () => {
 });
 
 describe("렌더 비용", () => {
-  it("재생 위치가 10Hz로 바뀌어도 격자는 다시 그려지지 않는다(헤더만 바뀐다)", async () => {
+  it("재생 위치가 10Hz로 바뀌어도 격자와 코드 띠는 다시 그려지지 않는다(헤더만 바뀐다)", async () => {
     const probe = vi.fn();
     const h = renderWithStudio(
       <PianoRoll
@@ -638,7 +659,8 @@ describe("렌더 비용", () => {
     );
     await startPlaying(h);
     const rendered = probe.mock.calls.length;
-    expect(rendered).toBeGreaterThan(0);
+    // 격자와 코드 띠가 각각 한 번 이상 커밋됐다.
+    expect(rendered).toBeGreaterThanOrEqual(2);
     h.fake.engine.currentTick.mockReturnValue(1920);
     act(() => {
       vi.advanceTimersByTime(250);

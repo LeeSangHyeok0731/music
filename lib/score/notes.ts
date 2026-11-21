@@ -1,3 +1,4 @@
+import { addClip } from "@/lib/score/edit";
 import { bakeClipInSong } from "@/lib/score/expand";
 import type {
   Clip,
@@ -188,6 +189,31 @@ export function emptyNotesClip(song: Song, trackId: string, clipId: string): Son
     ...target.clip,
     body: { type: "notes", notes: [] },
   });
+}
+
+/**
+ * 빈 칸에 빈 `notes` 클립을 한 번에 만든다: `addClip`이 정하는 자리·길이·id를 그대로 쓰되 본문이
+ * 패턴이 아니라 빈 음 목록이다(UI의 Shift+클릭 한 동작 = 실행취소 한 칸). 자리가 없으면 no-op
+ * (같은 참조). 드럼 트랙·없는 트랙은 `Error`(자리가 있든 없든).
+ */
+export function addEmptyNotesClip(
+  song: Song,
+  trackId: string,
+  startTick: number,
+): Song {
+  const track = song.tracks.find((t) => t.id === trackId);
+  if (!track) throw new Error(`없는 트랙입니다: ${trackId}`);
+  if (track.instrument === "drums") {
+    throw new Error("화음 악기의 음 클립만 편집합니다");
+  }
+  const added = addClip(song, trackId, startTick);
+  if (added === song) return song;
+  const before = new Set(track.clips.map((c) => c.id));
+  const created = added.tracks
+    .find((t) => t.id === trackId)
+    ?.clips.find((c) => !before.has(c.id));
+  if (!created) return song;
+  return emptyNotesClip(added, trackId, created.id);
 }
 
 // ---------------------------------------------------------------------------

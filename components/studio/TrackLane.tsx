@@ -56,6 +56,7 @@ interface TrackLaneViewProps {
     | "setTrackPattern"
     | "bakeClipToNotes"
     | "emptyNotesClip"
+    | "addEmptyNotesClip"
   >;
   select(selection: Selection): void;
   /** 피아노롤을 연다. `opener`는 닫을 때 포커스를 돌려받을 요소. 없으면 열지 않는다(레인만 단독으로 쓰는 경우). */
@@ -200,10 +201,11 @@ const TrackLaneView = memo(function TrackLaneView({
     }
     const clipId = planAddClip(song, trackId, pending.tick);
     if (clipId === null) return;
-    edit.addClip(trackId, pending.tick);
-    // Shift+클릭: 같은 자리를 빈 음 클립으로 바꾼다(기록은 두 칸이다 — 되돌리기 한 번은 패턴 클립까지).
+    // Shift+클릭(화음 악기): 같은 자리에 빈 음 클립을 한 번에 만든다(실행취소 한 칸).
     if (pending.shift && track.instrument !== "drums") {
-      edit.emptyNotesClip(trackId, clipId);
+      edit.addEmptyNotesClip(trackId, pending.tick);
+    } else {
+      edit.addClip(trackId, pending.tick);
     }
     select({ trackId, clipId });
   };

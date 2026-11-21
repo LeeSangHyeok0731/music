@@ -57,14 +57,23 @@ export function NoteBlock({
   );
 }
 
-/** 격자 위 코드 띠(읽기 전용). 클립 구간의 코드 구간을 클립 기준 x에 그린다. */
-export function RollChordStrip({
+/**
+ * 격자 위 코드 띠(읽기 전용). 클립 구간의 코드 구간을 클립 기준 x에 그린다. `memo`라서 곡·클립이
+ * 안 바뀌면(재생 위치 10Hz 갱신) 다시 그리지 않는다.
+ */
+export const RollChordStrip = memo(function RollChordStrip({
   song,
   clip,
+  onViewRender,
 }: {
   song: Song;
   clip: Clip;
+  /** 테스트용: 커밋될 때마다 부른다. 안정된 함수를 넘긴다. */
+  onViewRender?: () => void;
 }) {
+  useEffect(() => {
+    onViewRender?.();
+  });
   return (
     <div
       data-testid="roll-chord-strip"
@@ -90,7 +99,7 @@ export function RollChordStrip({
       ))}
     </div>
   );
-}
+});
 
 export interface NoteGridProps {
   song: Song;

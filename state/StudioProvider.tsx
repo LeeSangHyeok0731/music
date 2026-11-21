@@ -363,6 +363,8 @@ export function StudioProvider({
       },
       emptyNotesClip: (...a) =>
         applyEdit((s) => Notes.emptyNotesClip(s, ...a)),
+      addEmptyNotesClip: (...a) =>
+        applyEdit((s) => Notes.addEmptyNotesClip(s, ...a)),
       notes: {
         addNote: (...a) => applyEdit((s) => Notes.addNote(s, ...a)),
         moveNotes: (...a) => applyEdit((s) => Notes.moveNotes(s, ...a)),

@@ -34,7 +34,7 @@ export interface PianoRollProps {
    * 버튼처럼) 클립 본문 버튼으로 돌려준다.
    */
   opener?: HTMLElement | null;
-  /** 테스트용: 격자(memo)가 커밋될 때마다 부른다. 재생 위치 갱신에는 불리지 않아야 한다. */
+  /** 테스트용: 격자와 코드 띠(둘 다 memo)가 커밋될 때마다 부른다. 재생 위치 갱신에는 불리지 않아야 한다. */
   onGridRender?: () => void;
 }
 
@@ -62,7 +62,9 @@ function clipBodyButton(clipId: string): HTMLElement | null {
  *   모달을 닫아 버리기 때문이다.
  * - 재생 중·재생 대기 중에도 열려 있고(헤더에 알림), 편집만 막힌다.
  * - 스크롤은 격자 영역 하나가 소유한다(가로·세로). 건반 열·코드 띠는 그 안의 `sticky`다.
- * - 재생 위치는 10Hz 표본을 읽는 헤더만 다시 그리고, 격자와 건반은 `memo`, 플레이헤드는 rAF로 transform만 쓴다.
+ * - 렌더 비용: 이 컴포넌트는 `useStudio()` 전체를 읽으므로 10Hz 위치 표본마다 함께 다시 렌더된다
+ *   (함수 본문과 헤더). 무거운 자식인 격자(`NoteGrid`)·건반(`KeyColumn`)·코드 띠(`RollChordStrip`)는
+ *   `memo`에 안정된 props만 받아 다시 그려지지 않고, 플레이헤드는 rAF로 transform만 쓴다.
  */
 export function PianoRoll({
   trackId,
@@ -161,7 +163,11 @@ export function PianoRoll({
               className="sticky left-0 z-10 shrink-0 border-r border-white/10 bg-[#141519]"
               style={{ width: KEY_COLUMN_WIDTH }}
             />
-            <RollChordStrip song={song} clip={clip} />
+            <RollChordStrip
+              song={song}
+              clip={clip}
+              onViewRender={onGridRender}
+            />
           </div>
           <div className="flex">
             <KeyColumn lo={range.lo} hi={range.hi} />
