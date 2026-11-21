@@ -187,16 +187,25 @@ describe("Studio 스크롤 구조", () => {
     expect(playhead.className).toContain("bottom-0");
   });
 
-  it("마디 컨트롤은 타임라인 안 스테이지 오른쪽에 눈금자 행 높이로 있어 함께 스크롤된다", () => {
-    renderWithStudio(<Studio />);
-    const timeline = screen.getByTestId("timeline");
+  it("마디 컨트롤은 스테이지 안, 마지막 마디 바로 뒤(눈금자 행)에 있어 함께 스크롤된다", () => {
+    const { studio } = renderWithStudio(<Studio />);
     const stage = screen.getByTestId("stage");
     const control = screen.getByTestId("bars-control");
-    expect(control.parentElement).toBe(timeline);
-    expect(stage.nextElementSibling).toBe(control);
+    expect(control.parentElement).toBe(stage);
+    expect(stage.parentElement).toBe(screen.getByTestId("timeline"));
+    expect(control.style.left).toBe(`${studio().song.bars * PX_PER_BAR}px`);
     expect(control.style.height).toBe(`${RULER_HEIGHT}px`);
+    // 짧은 곡에서도 컨트롤이 격자 폭 안에 들어오게 최소 폭에서 그 폭을 뺀다.
     expect(stage.style.minWidth).toContain(`${BARS_CONTROL_WIDTH}px`);
     expect(stage.className).toContain("shrink-0");
+  });
+
+  it("마디 컨트롤은 세로 스크롤러를 만들지 않고 클립 레인 위가 아니라 눈금자 행에 놓인다", () => {
+    renderWithStudio(<Studio />);
+    const control = screen.getByTestId("bars-control");
+    expect(control.className).not.toMatch(/overflow-/);
+    expect(control.style.top).toBe("0px");
+    expect(control.style.height).toBe(screen.getByTestId("ruler").style.height);
   });
 
   it("헤더 열의 눈금 칸은 눈금자와 같은 높이다", () => {

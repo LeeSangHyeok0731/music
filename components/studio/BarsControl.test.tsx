@@ -7,7 +7,9 @@ import { MAX_BARS_UI } from "@/lib/score/edit";
 import type { Song } from "@/lib/score/model";
 import { ticksPerBar } from "@/lib/score/time";
 
-import { BarsControl } from "./BarsControl";
+import { BARS_CONTROL_WIDTH, BarsControl } from "./BarsControl";
+import { PX_PER_BAR } from "./geometry";
+import { RULER_HEIGHT } from "./layout";
 import { installAudioContextStub, renderWithStudio } from "./testing/harness";
 
 let restoreAudio: () => void;
@@ -107,5 +109,41 @@ describe("BarsControl", () => {
     expect(studio().message).toBe(
       "마디를 줄였습니다 — 되돌리기로 복구할 수 있습니다",
     );
+  });
+});
+
+describe("BarsControl 자리와 크기", () => {
+  const control = () => screen.getByTestId("bars-control");
+
+  it("마지막 마디 바로 뒤(bars × PX_PER_BAR)에 눈금자 행 높이로 절대 배치된다", () => {
+    const { studio } = renderWithStudio(<BarsControl />);
+    expect(control().className).toContain("absolute");
+    expect(control().style.left).toBe(`${studio().song.bars * PX_PER_BAR}px`);
+    expect(control().style.top).toBe("0px");
+    expect(control().style.height).toBe(`${RULER_HEIGHT}px`);
+    expect(control().style.width).toBe(`${BARS_CONTROL_WIDTH}px`);
+  });
+
+  it("마디 수를 따라 위치가 움직인다(1마디·64마디·＋ 누른 뒤)", () => {
+    renderWithStudio(<BarsControl />, { stored: storedWithBars(1) });
+    expect(control().style.left).toBe(`${1 * PX_PER_BAR}px`);
+    cleanup();
+    renderWithStudio(<BarsControl />, {
+      stored: storedWithBars(MAX_BARS_UI),
+    });
+    expect(control().style.left).toBe(`${MAX_BARS_UI * PX_PER_BAR}px`);
+    cleanup();
+    const h = renderWithStudio(<BarsControl />);
+    fireEvent.click(add());
+    expect(control().style.left).toBe(`${h.studio().song.bars * PX_PER_BAR}px`);
+  });
+
+  it("두 버튼은 28×28px 이상(size-7)이고 글리프가 읽히는 크기다", () => {
+    renderWithStudio(<BarsControl />);
+    for (const b of [add(), remove()]) {
+      expect(b.className).toMatch(/(^|\s)size-7(\s|$)/);
+      expect(b.className).toMatch(/(^|\s)text-lg(\s|$)/);
+    }
+    expect(RULER_HEIGHT).toBeGreaterThanOrEqual(28);
   });
 });

@@ -25,8 +25,8 @@ import { useShortcuts } from "./useShortcuts";
  * 편집 화면의 최상위. `StudioProvider` 안에서 쓴다(Provider는 만들지 않는다).
  *
  * 좌측 헤더 열(고정 폭)과 가로 스크롤되는 타임라인(`data-testid="timeline"`)이
- * 같은 행 높이 상수(`layout.ts`)를 쓴다. 타임라인 안에서 스테이지 오른쪽에 `BarsControl`이 눈금자 행
- * 높이로 붙어 함께 스크롤된다. 코드 레인은 `ChordLane`, 트랙 레인(`track-lane-<id>`)은
+ * 같은 행 높이 상수(`layout.ts`)를 쓴다. 스테이지 안 눈금자 행의 마지막 마디 바로 뒤에 `BarsControl`이
+ * 절대 배치돼 함께 스크롤된다. 코드 레인은 `ChordLane`, 트랙 레인(`track-lane-<id>`)은
  * `TrackLane`이 그린다.
  */
 export function Studio() {
@@ -83,7 +83,7 @@ export function Studio() {
               className="relative min-h-full shrink-0"
               style={{
                 width: song.bars * PX_PER_BAR,
-                // 짧은 곡이어도 마디 컨트롤이 화면 안에 들어오게 그 폭만큼 비운다.
+                // 짧은 곡이어도 마지막 마디 뒤의 마디 컨트롤이 화면 안에 들어오게 그 폭만큼 비운다.
                 minWidth: `calc(100% - ${BARS_CONTROL_WIDTH}px)`,
               }}
             >
@@ -100,8 +100,8 @@ export function Studio() {
                 playing={playing}
                 lengthTicks={songLengthTicks(song)}
               />
+              <BarsControl />
             </div>
-            <BarsControl />
           </div>
         </div>
       </div>
