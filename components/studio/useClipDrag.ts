@@ -13,6 +13,7 @@ import { addClip, moveClip, resizeClip } from "@/lib/score/edit";
 import type { Clip, Song } from "@/lib/score/model";
 
 import { deltaTicks } from "./geometry";
+import { beginGesture } from "./gestures";
 import { boundaryTickFromPointer } from "./useBoundaryDrag";
 
 /**
@@ -117,6 +118,8 @@ interface Gesture {
   dragging: boolean;
   /** 눌린 요소. 캡처를 잡은 요소이자 클릭의 기준(본문 버튼 = 팝오버 앵커)이다. */
   target: HTMLElement;
+  /** 진행 중 제스처 수(`gestures.ts`)에서 이 제스처를 거둔다. 끝나는 모든 경로에서 부른다. */
+  release(): void;
 }
 
 interface PreviewState {
@@ -201,7 +204,10 @@ export function useClipDrag({
   const cancel = useCallback(() => {
     const active = activeRef.current;
     activeRef.current = null;
-    if (active) releaseCapture(active.target, active.pointerId);
+    if (active) {
+      releaseCapture(active.target, active.pointerId);
+      active.release();
+    }
     setPreview(null);
   }, []);
 
@@ -211,7 +217,10 @@ export function useClipDrag({
     if (editable) return;
     const active = activeRef.current;
     activeRef.current = null;
-    if (active) releaseCapture(active.target, active.pointerId);
+    if (active) {
+      releaseCapture(active.target, active.pointerId);
+      active.release();
+    }
   }, [editable]);
 
   // 언마운트(클립이 사라지는 편집 포함)에서 남은 캡처를 푼다.
@@ -219,7 +228,10 @@ export function useClipDrag({
     () => () => {
       const active = activeRef.current;
       activeRef.current = null;
-      if (active) releaseCapture(active.target, active.pointerId);
+      if (active) {
+        releaseCapture(active.target, active.pointerId);
+        active.release();
+      }
     },
     [],
   );
@@ -236,7 +248,8 @@ export function useClipDrag({
     // 캡처 단계 + preventDefault: 이 Esc는 드래그 취소로 쓰였다는 표시다. 팝오버 닫기와
     // 선택 해제(`useShortcuts`, 버블 단계)가 같은 Esc에 또 반응하지 않게 한다. 마운트 순서와 무관.
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
+      // 이미 처리된 Esc에는 반응하지 않는다(한 번의 Esc가 두 겹을 닫지 않게 하는 이중 안전장치).
+      if (e.key !== "Escape" || e.defaultPrevented) return;
       e.preventDefault();
       cancel();
     };
@@ -280,6 +293,7 @@ export function useClipDrag({
         result: base,
         dragging: false,
         target: e.currentTarget,
+        release: beginGesture(),
       };
     },
     onPointerMove(e) {
@@ -335,6 +349,7 @@ export function useClipDrag({
       if (!active || e.pointerId !== active.pointerId) return;
       activeRef.current = null;
       releaseCapture(active.target, active.pointerId);
+      active.release();
       if (!active.dragging) {
         // 클릭은 이 제스처의 본문 버튼으로 푼다(up 이벤트의 요소가 아니라).
         if (active.kind === "move") onClick(active.clipId, active.target);

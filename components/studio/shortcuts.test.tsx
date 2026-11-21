@@ -5,7 +5,7 @@ import {
   screen,
   within,
 } from "@testing-library/react";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AUTOSAVE_KEY, serializeSong } from "@/lib/score/autosave";
@@ -13,6 +13,7 @@ import { buildDemoSong } from "@/lib/score/demo-song";
 import type { Song } from "@/lib/score/model";
 import { songWithPatterns } from "@/lib/score/testing/builders";
 import type { PlayMode } from "@/state/testing/fake-deps";
+import { StudioContext, useStudio } from "@/state/useStudio";
 
 import { ChordLane } from "./ChordLane";
 import { Studio } from "./Studio";
@@ -30,12 +31,31 @@ import {
   stubLaneRect,
   xAt,
 } from "./testing/pointer";
+import { hasActiveGesture } from "./gestures";
 import { useShortcuts } from "./useShortcuts";
 
 let restoreAudio: () => void;
 let restorePointer: () => void;
 
+/**
+ * jsdom은 `:focus-visible`을 믿을 만하게 계산하지 않는다. 테스트가 키보드 포커스(true)·마우스
+ * 포커스(false)·선택자 미지원(`"throw"`)을 정한다. 기본은 키보드 포커스.
+ */
+let focusVisible: boolean | "throw" = true;
+
 beforeEach(() => {
+  focusVisible = true;
+  const originalMatches = Element.prototype.matches;
+  vi.spyOn(Element.prototype, "matches").mockImplementation(function (
+    this: Element,
+    selector: string,
+  ) {
+    if (selector === ":focus-visible") {
+      if (focusVisible === "throw") throw new SyntaxError("unsupported");
+      return focusVisible;
+    }
+    return originalMatches.call(this, selector);
+  });
   restoreAudio = installAudioContextStub();
   restorePointer = installPointerCaptureStubs();
   // 재생 중에는 10Hz 위치 표본 타이머가 돈다. 가짜로 막아 act 밖 갱신을 없앤다.
@@ -44,6 +64,8 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  // 제스처 수가 새면(어느 종료 경로가 해제를 빼먹으면) 다음 테스트로 번진다.
+  expect(hasActiveGesture()).toBe(false);
   vi.useRealTimers();
   vi.restoreAllMocks();
   restorePointer();
@@ -105,6 +127,8 @@ function Extras() {
       </select>
       <input type="range" aria-label="슬라이더" />
       <input type="checkbox" aria-label="체크" />
+      <input type="radio" aria-label="라디오" />
+      <input type="button" value="입력 버튼" />
       <button type="button">버튼</button>
       <a href="#x">링크</a>
       <details>
@@ -226,16 +250,27 @@ function chordDialog() {
   return screen.getByRole("dialog", { name: "코드 선택" });
 }
 /** clip-1 본문을 5px 넘게 끌어 드래그를 시작한다(놓지 않는다). */
-function startClipDrag() {
+function startClipDrag(): Element {
   const x = xAt(100);
   firePointer(body("clip-1"), "pointerdown", { clientX: x });
   firePointer(body("clip-1"), "pointermove", { clientX: x + 100 });
+  return body("clip-1");
+}
+/** clip-1의 길이 핸들을 끌어 길이 드래그를 시작한다(놓지 않는다). */
+function startResizeDrag(): Element {
+  const handle = within(tile("clip-1")).getByRole("separator", {
+    name: "클립 길이 조절",
+  });
+  firePointer(handle, "pointerdown", { clientX: xAt(1920) });
+  firePointer(handle, "pointermove", { clientX: xAt(1920) + 100 });
+  return handle;
 }
 /** 코드 경계 1을 끌어 드래그를 시작한다(놓지 않는다). */
-function startBoundaryDrag() {
+function startBoundaryDrag(): Element {
   const handle = screen.getByRole("separator", { name: "코드 경계 1" });
   firePointer(handle, "pointerdown", { clientX: xAt(3840) });
   firePointer(handle, "pointermove", { clientX: xAt(5760) });
+  return handle;
 }
 function chordWidths() {
   return within(screen.getByTestId("chord-lane"))
@@ -243,21 +278,44 @@ function chordWidths() {
     .map((b) => b.style.width);
 }
 
+/** 포커스가 어떻게 왔든 Space를 네이티브에 맡기는 대상. */
 const NATIVE_TARGETS: Array<[string, () => Element]> = [
-  ["button", () => screen.getByRole("button", { name: "버튼" })],
   ["a", () => screen.getByRole("link", { name: "링크" })],
   ["summary", () => screen.getByText("요약")],
   ["select", () => screen.getByRole("combobox", { name: "고르기" })],
   ["textarea", () => screen.getByRole("textbox", { name: "메모" })],
   ["input[text]", () => screen.getByRole("textbox", { name: "텍스트" })],
   ["input[number]", () => screen.getByRole("spinbutton", { name: "숫자" })],
-  ["input[range]", () => screen.getByRole("slider", { name: "슬라이더" })],
   ["input[checkbox]", () => screen.getByRole("checkbox", { name: "체크" })],
+  ["input[radio]", () => screen.getByRole("radio", { name: "라디오" })],
   ["[contenteditable]", () => screen.getByTestId("editable")],
-  ["[role=button]", () => screen.getByTestId("role-button")],
-  ["[role=separator]", () => screen.getByTestId("role-separator")],
   ["[role=dialog] 자신", () => screen.getByRole("dialog")],
   ["[role=dialog] 안의 요소", () => screen.getByTestId("in-dialog")],
+];
+
+/** 키보드로 포커스됐을 때만 Space를 네이티브에 맡기는 버튼 계열(마우스 포커스면 Space가 재생한다). */
+const BUTTON_TARGETS: Array<[string, () => Element]> = [
+  ["button", () => screen.getByRole("button", { name: "버튼" })],
+  [
+    "input[type=button]",
+    () => screen.getByRole("button", { name: "입력 버튼" }),
+  ],
+  ["[role=button]", () => screen.getByTestId("role-button")],
+  ["[role=separator]", () => screen.getByTestId("role-separator")],
+  ["클립 본문 버튼", () => body("clip-1")],
+  [
+    "클립 길이 핸들",
+    () =>
+      within(tile("clip-1")).getByRole("separator", { name: "클립 길이 조절" }),
+  ],
+  [
+    "코드 경계 핸들",
+    () => screen.getByRole("separator", { name: "코드 경계 1" }),
+  ],
+  [
+    "코드 구간 버튼",
+    () => within(screen.getByTestId("chord-lane")).getAllByRole("button")[0],
+  ],
 ];
 
 describe("Space — 재생/정지 토글", () => {
@@ -269,10 +327,9 @@ describe("Space — 재생/정지 토글", () => {
     expect(play).toHaveBeenCalledTimes(1);
     expect(h.studio().pending).toBe(true);
 
-    // 대기 중 재누름은 처리하지 않는다: play를 다시 부르지 않고 기본 동작도 막지 않는다.
-    // (Provider의 play도 idle이 아니면 막지만, 여기서 먼저 걸러야 "처리했다"고 하지 않는다.)
-    expect(space().defaultPrevented).toBe(false);
-    expect(space().defaultPrevented).toBe(false);
+    // 대기 중 재누름은 삼킨다(기본 동작 막음). play를 다시 부르지 않는다.
+    expect(space().defaultPrevented).toBe(true);
+    expect(space().defaultPrevented).toBe(true);
     expect(play).toHaveBeenCalledTimes(1);
     expect(h.fake.engine.stop).not.toHaveBeenCalled();
     expect(h.studio().pending).toBe(true);
@@ -318,8 +375,9 @@ describe("Space — 재생/정지 토글", () => {
   });
 
   it.each(NATIVE_TARGETS)(
-    "%s 위에서는 처리하지 않는다(네이티브 동작에 맡긴다)",
+    "%s 위에서는 포커스 방식과 무관하게 처리하지 않는다(네이티브 동작에 맡긴다)",
     (_name, getTarget) => {
+      focusVisible = false;
       const h = renderEditor();
       const ev = space(getTarget());
       expect(ev.defaultPrevented).toBe(false);
@@ -338,21 +396,122 @@ describe("Space — 재생/정지 토글", () => {
     expect(h.studio().playing).toBe(true);
   });
 
-  it("클립 본문 버튼·길이 핸들·코드 경계 핸들·구간 버튼 위에서는 처리하지 않는다", () => {
+  it.each(BUTTON_TARGETS)(
+    "키보드로 포커스된(:focus-visible) %s 위에서는 처리하지 않는다(네이티브 Space·Enter 유지)",
+    (_name, getTarget) => {
+      focusVisible = true;
+      const h = renderEditor();
+      const ev = space(getTarget());
+      expect(ev.defaultPrevented).toBe(false);
+      expect(h.fake.engine.play).not.toHaveBeenCalled();
+      expect(h.studio().pending).toBe(false);
+    },
+  );
+
+  it.each(BUTTON_TARGETS)(
+    "마우스로 포커스된(:focus-visible 아님) %s 위에서는 Space가 재생한다",
+    (_name, getTarget) => {
+      focusVisible = false;
+      const h = renderEditor();
+      const ev = space(getTarget());
+      expect(ev.defaultPrevented).toBe(true);
+      expect(h.fake.engine.play).toHaveBeenCalledTimes(1);
+      expect(h.studio().pending).toBe(true);
+    },
+  );
+
+  it("클립을 마우스로 만진 뒤(팝오버를 Esc로 닫아 포커스가 클립 버튼으로 돌아온 상태)에도 Space가 재생·정지한다", async () => {
     const h = renderEditor();
-    const targets: Element[] = [
-      body("clip-1"),
-      within(tile("clip-1")).getByRole("separator", { name: "클립 길이 조절" }),
-      screen.getByRole("separator", { name: "코드 경계 1" }),
-      within(screen.getByTestId("chord-lane")).getAllByRole("button")[0],
-    ];
-    for (const t of targets) {
-      expect(space(t).defaultPrevented).toBe(false);
-    }
-    expect(h.fake.engine.play).not.toHaveBeenCalled();
+    pointerClick(body("clip-1"), xAt(100));
+    esc();
+    expect(document.activeElement).toBe(body("clip-1"));
+    focusVisible = false;
+
+    expect(space(body("clip-1")).defaultPrevented).toBe(true);
+    expect(h.fake.engine.play).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      h.fake.resolvePlay({ status: "playing" });
+    });
+    expect(h.studio().playing).toBe(true);
+    expect(space(body("clip-1")).defaultPrevented).toBe(true);
+    expect(h.fake.engine.stop).toHaveBeenCalledTimes(1);
+    // 클립은 팝오버를 다시 열지 않았다(Space가 클릭으로 새지 않는다).
+    expect(screen.queryByRole("dialog", { name: "패턴 선택" })).toBeNull();
   });
 
-  it("열린 패턴 팝오버·코드 팝오버 안에서는 처리하지 않는다", () => {
+  it("range 슬라이더에 포커스가 있어도 Space가 재생한다(키보드 포커스여도)", () => {
+    focusVisible = true;
+    const h = renderEditor();
+    const ev = space(screen.getByRole("slider", { name: "슬라이더" }));
+    expect(ev.defaultPrevented).toBe(true);
+    expect(h.fake.engine.play).toHaveBeenCalledTimes(1);
+  });
+
+  it(":focus-visible를 모르는 환경(matches가 던짐)이면 키보드 포커스로 보고 버튼 위 Space를 넘긴다", () => {
+    focusVisible = "throw";
+    const h = renderEditor();
+    for (const [, get] of BUTTON_TARGETS) {
+      expect(space(get()).defaultPrevented).toBe(false);
+    }
+    expect(h.fake.engine.play).not.toHaveBeenCalled();
+    // range는 선택자를 묻지 않으므로 여전히 재생한다.
+    space(screen.getByRole("slider", { name: "슬라이더" }));
+    expect(h.fake.engine.play).toHaveBeenCalledTimes(1);
+  });
+
+  it("대기 중 Space는 삼키되 단축키 자신이 play()를 다시 부르지 않는다", () => {
+    const play = vi.fn(() => Promise.resolve());
+    function PendingOverride({ children }: { children: ReactNode }) {
+      const api = useStudio();
+      return (
+        <StudioContext.Provider
+          value={{
+            ...api,
+            playing: false,
+            pending: true,
+            editable: false,
+            play,
+          }}
+        >
+          {children}
+        </StudioContext.Provider>
+      );
+    }
+    renderWithStudio(
+      <PendingOverride>
+        <Keys />
+      </PendingOverride>,
+    );
+    expect(space().defaultPrevented).toBe(true);
+    expect(play).not.toHaveBeenCalled();
+  });
+
+  it("처리한 Space의 keyup은 막고(버튼이 keyup에 클릭되지 않게), 처리 안 한 Space의 keyup은 두며, 반복 keydown은 표시를 지우지 않는다", () => {
+    renderEditor();
+    const up = (target: Element | Document = document.body) => {
+      const ev = new KeyboardEvent("keyup", {
+        key: " ",
+        code: "Space",
+        bubbles: true,
+        cancelable: true,
+      });
+      fireEvent(target, ev);
+      return ev;
+    };
+    // 처리 안 함(텍스트 입력) → keyup도 그대로.
+    const input = screen.getByRole("textbox", { name: "텍스트" });
+    space(input);
+    expect(up(input).defaultPrevented).toBe(false);
+
+    // 처리함(+ 반복 keydown) → keyup 막음, 한 번만.
+    space();
+    space(document.body, { repeat: true });
+    expect(up().defaultPrevented).toBe(true);
+    expect(up().defaultPrevented).toBe(false);
+  });
+
+  it("열린 패턴 팝오버·코드 팝오버 안에서는 (마우스 포커스여도) 처리하지 않는다", () => {
+    focusVisible = false;
     const h = renderEditor();
     pointerClick(body("clip-1"), xAt(100));
     expect(space(patternDialog()).defaultPrevented).toBe(false);
@@ -367,19 +526,30 @@ describe("Space — 재생/정지 토글", () => {
     expect(h.fake.engine.play).not.toHaveBeenCalled();
   });
 
-  it("Studio 안의 재생 버튼·템포 슬라이더·메트로놈 체크박스 위에서는 처리하지 않는다", () => {
+  it("Studio: 키보드 포커스된 재생 버튼·메트로놈 체크박스 위에서는 처리하지 않고, 템포 슬라이더에서는 재생한다", () => {
     const h = renderWithStudio(<Studio />, { playMode: "manual" });
-    const targets = [
+    for (const t of [
       screen.getByRole("button", { name: "재생" }),
-      screen.getByRole("slider", { name: "템포" }),
       screen.getByRole("checkbox", { name: "메트로놈" }),
-    ];
-    for (const t of targets) {
+    ]) {
       t.focus();
-      const ev = space(t);
-      expect(ev.defaultPrevented).toBe(false);
+      expect(space(t).defaultPrevented).toBe(false);
     }
     expect(h.fake.engine.play).not.toHaveBeenCalled();
+
+    const slider = screen.getByRole("slider", { name: "템포" });
+    slider.focus();
+    expect(space(slider).defaultPrevented).toBe(true);
+    expect(h.fake.engine.play).toHaveBeenCalledTimes(1);
+  });
+
+  it("Studio: 마우스로 포커스된 재생 버튼 위의 Space도 재생한다", () => {
+    focusVisible = false;
+    const h = renderWithStudio(<Studio />, { playMode: "manual" });
+    const button = screen.getByRole("button", { name: "재생" });
+    button.focus();
+    expect(space(button).defaultPrevented).toBe(true);
+    expect(h.fake.engine.play).toHaveBeenCalledTimes(1);
   });
 
   it("Studio에서 body의 Space는 play를 정확히 한 번 부른다(단축키가 한 번만 걸려 있다)", () => {
@@ -532,6 +702,55 @@ describe("Ctrl+Z / Cmd+Z — 실행취소", () => {
     expect(h.studio().song.bars).toBe(9);
   });
 
+  it("한글 IME 등 비라틴 배열(key가 z가 아님)에서도 물리 키 KeyZ로 되돌린다", () => {
+    const h = renderEditor();
+    editOnce(h);
+    const ev = press(document.body, "ㅋ", { ctrlKey: true, code: "KeyZ" });
+    expect(ev.defaultPrevented).toBe(true);
+    expect(h.studio().song.bars).toBe(8);
+  });
+
+  it("key가 문자열이 아닌 합성 이벤트(자동완성 등)는 던지지 않고 무시한다", () => {
+    const h = renderEditor();
+    editOnce(h);
+    const ev = new KeyboardEvent("keydown", {
+      bubbles: true,
+      cancelable: true,
+      ctrlKey: true,
+    });
+    Object.defineProperty(ev, "key", { value: undefined });
+    // 리스너가 던져도 dispatchEvent는 던지지 않고 window "error" 이벤트로 알린다.
+    const onError = vi.fn((e: ErrorEvent) => e.preventDefault());
+    window.addEventListener("error", onError);
+    try {
+      fireEvent(document.body, ev);
+    } finally {
+      window.removeEventListener("error", onError);
+    }
+    expect(onError).not.toHaveBeenCalled();
+    expect(ev.defaultPrevented).toBe(false);
+    expect(h.studio().song.bars).toBe(9);
+  });
+
+  it("이미 처리된(defaultPrevented) Space·Delete·Ctrl+Z에는 아무것도 하지 않는다", () => {
+    const h = renderEditor();
+    editOnce(h);
+    selectClip(h, "clip-1");
+    const claim = (e: Event) => e.preventDefault();
+    window.addEventListener("keydown", claim, true);
+    try {
+      space();
+      del();
+      backspace();
+      ctrlZ();
+    } finally {
+      window.removeEventListener("keydown", claim, true);
+    }
+    expect(h.fake.engine.play).not.toHaveBeenCalled();
+    expect(clipIds(h)).toEqual(["clip-1", "clip-2"]);
+    expect(h.studio().song.bars).toBe(9);
+  });
+
   it("IME 조합 중에는 무시한다", () => {
     const h = renderEditor();
     editOnce(h);
@@ -663,9 +882,11 @@ describe("Delete / Backspace — 선택한 클립 삭제", () => {
 });
 
 describe("Esc — 한 번에 한 겹만 닫는다(드래그 → 팝오버 → 선택)", () => {
+  // 마운트 순서를 바꿔 돌리지만 증명하는 것은 "캡처 단계(드래그·팝오버)가 버블 단계(useShortcuts)보다
+  // 항상 먼저 돈다"는 분리다 — 순서가 달라도 결과가 같아야 하는 구조다.
   describe.each([
-    ["useShortcuts가 레인보다 먼저 마운트", true],
-    ["useShortcuts가 레인보다 나중에 마운트", false],
+    ["캡처·버블 분리: useShortcuts(버블)가 레인보다 먼저 마운트", true],
+    ["캡처·버블 분리: useShortcuts(버블)가 레인보다 나중에 마운트", false],
   ])("%s", (_label, keysFirst) => {
     it("(1) 클립 드래그 중 Esc는 드래그만 취소한다", () => {
       const h = renderEditor({ keysFirst });
@@ -800,6 +1021,34 @@ describe("Esc — 한 번에 한 겹만 닫는다(드래그 → 팝오버 → �
     expect(selected(h)).toEqual({ trackId: PIANO, clipId: "clip-1" });
   });
 
+  it("이미 처리된 Esc는 진행 중인 드래그도 취소하지 않는다(클립·경계)", () => {
+    const h = renderEditor();
+    const claim = (e: Event) => e.preventDefault();
+
+    startClipDrag();
+    window.addEventListener("keydown", claim, true);
+    try {
+      esc();
+    } finally {
+      window.removeEventListener("keydown", claim, true);
+    }
+    expect(tile("clip-1").style.left).not.toBe("0px");
+    expect(hasActiveGesture()).toBe(true);
+    firePointer(body("clip-1"), "pointerup", { clientX: xAt(100) + 100 });
+    expect(h.studio().song.tracks[0].clips[0].start).toBe(960);
+
+    const handle = startBoundaryDrag();
+    window.addEventListener("keydown", claim, true);
+    try {
+      esc();
+    } finally {
+      window.removeEventListener("keydown", claim, true);
+    }
+    expect(chordWidths()[0]).toBe("480px");
+    firePointer(handle, "pointerup", { clientX: xAt(5760) });
+    expect(h.studio().song.progression[1].start).toBe(5760);
+  });
+
   it("IME 조합 중의 Esc는 선택을 풀지 않는다", () => {
     const h = renderEditor();
     selectClip(h, "clip-1");
@@ -869,5 +1118,117 @@ describe("리스너 수명", () => {
     space();
     ctrlZ();
     expect(h.fake.engine.play).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("진행 중인 드래그 동안의 실행취소", () => {
+  function withHistory(h: StudioHarness) {
+    act(() => h.studio().edit.setBars(9));
+    expect(h.studio().song.bars).toBe(9);
+    expect(h.studio().canUndo).toBe(true);
+  }
+  const pianoClip = (h: StudioHarness) => h.studio().song.tracks[0].clips[0];
+
+  it("클립 이동 드래그 중 Ctrl+Z는 되돌리지 않고, 놓으면 정상 커밋되며, 끝난 뒤에는 되돌린다", () => {
+    const h = renderEditor();
+    withHistory(h);
+    startClipDrag();
+    expect(hasActiveGesture()).toBe(true);
+
+    expect(ctrlZ().defaultPrevented).toBe(false);
+    expect(h.studio().song.bars).toBe(9);
+    expect(h.studio().canUndo).toBe(true);
+
+    firePointer(body("clip-1"), "pointerup", { clientX: xAt(100) + 100 });
+    expect(hasActiveGesture()).toBe(false);
+    expect(pianoClip(h).start).toBe(960);
+
+    expect(ctrlZ().defaultPrevented).toBe(true);
+    expect(pianoClip(h).start).toBe(0);
+    expect(h.studio().song.bars).toBe(9);
+  });
+
+  it("길이 드래그 중 Ctrl+Z는 되돌리지 않고, 놓으면 정상 커밋된다", () => {
+    const h = renderEditor();
+    withHistory(h);
+    const handle = startResizeDrag();
+    expect(ctrlZ().defaultPrevented).toBe(false);
+    expect(h.studio().song.bars).toBe(9);
+
+    firePointer(handle, "pointerup", { clientX: xAt(1920) + 100 });
+    expect(pianoClip(h).length).toBeGreaterThan(1920);
+    expect(ctrlZ().defaultPrevented).toBe(true);
+    expect(pianoClip(h).length).toBe(1920);
+  });
+
+  it("코드 경계 드래그 중 Ctrl+Z는 되돌리지 않고, 놓으면 정상 커밋된다", () => {
+    const h = renderEditor();
+    withHistory(h);
+    const handle = startBoundaryDrag();
+    expect(ctrlZ().defaultPrevented).toBe(false);
+    expect(h.studio().song.bars).toBe(9);
+
+    firePointer(handle, "pointerup", { clientX: xAt(5760) });
+    expect(h.studio().song.progression[1].start).toBe(5760);
+    expect(ctrlZ().defaultPrevented).toBe(true);
+    expect(h.studio().song.progression[1].start).toBe(3840);
+  });
+
+  it("누르고만 있는(임계값 전) 제스처도 센다: 놓으면(클릭) 풀린다", () => {
+    const h = renderEditor();
+    withHistory(h);
+    firePointer(body("clip-1"), "pointerdown", { clientX: xAt(100) });
+    expect(hasActiveGesture()).toBe(true);
+    expect(ctrlZ().defaultPrevented).toBe(false);
+    firePointer(body("clip-1"), "pointerup", { clientX: xAt(100) });
+    expect(hasActiveGesture()).toBe(false);
+  });
+
+  const STARTS: Array<[string, () => Element]> = [
+    ["클립 이동", startClipDrag],
+    ["클립 길이", startResizeDrag],
+    ["코드 경계", startBoundaryDrag],
+  ];
+  const ENDS: Array<[string, (el: Element) => void]> = [
+    ["pointerup", (el) => firePointer(el, "pointerup", { clientX: 0 })],
+    ["pointercancel", (el) => firePointer(el, "pointercancel", { clientX: 0 })],
+    [
+      "lostpointercapture",
+      (el) =>
+        fireEvent(
+          el,
+          new PointerEvent("lostpointercapture", {
+            bubbles: true,
+            pointerId: 1,
+          }),
+        ),
+    ],
+    ["Esc", () => esc()],
+  ];
+  describe.each(STARTS)("%s 드래그", (_n, start) => {
+    it.each(ENDS)("%s로 끝나면 제스처 수가 풀린다", (_e, end) => {
+      renderEditor();
+      const el = start();
+      expect(hasActiveGesture()).toBe(true);
+      end(el);
+      expect(hasActiveGesture()).toBe(false);
+    });
+
+    it("편집 불가(재생 시작)가 되면 풀린다", async () => {
+      const h = renderEditor();
+      start();
+      expect(hasActiveGesture()).toBe(true);
+      await startPlaying(h);
+      expect(h.studio().editable).toBe(false);
+      expect(hasActiveGesture()).toBe(false);
+    });
+
+    it("드래그 중 언마운트하면 풀린다", () => {
+      const h = renderEditor();
+      start();
+      expect(hasActiveGesture()).toBe(true);
+      h.unmount();
+      expect(hasActiveGesture()).toBe(false);
+    });
   });
 });

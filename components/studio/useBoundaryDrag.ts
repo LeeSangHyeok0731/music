@@ -13,6 +13,7 @@ import { moveBoundary } from "@/lib/score/edit";
 import type { ChordSegment, Song } from "@/lib/score/model";
 
 import { pointerToTick } from "./geometry";
+import { beginGesture } from "./gestures";
 
 /**
  * 코드 경계 드래그의 순수 부분. 규칙(스냅·클램프)은 `lib/score/edit.ts`의
@@ -54,6 +55,8 @@ interface ActiveDrag {
   original: Song;
   tick: number;
   target: Element;
+  /** 진행 중 제스처 수(`gestures.ts`)에서 이 제스처를 거둔다. 끝나는 모든 경로에서 부른다. */
+  release(): void;
 }
 
 interface PreviewState {
@@ -107,7 +110,10 @@ export function useBoundaryDrag({
   const cancel = useCallback(() => {
     const active = activeRef.current;
     activeRef.current = null;
-    if (active) releaseCapture(active.target, active.pointerId);
+    if (active) {
+      releaseCapture(active.target, active.pointerId);
+      active.release();
+    }
     setPreview(null);
   }, []);
 
@@ -117,8 +123,24 @@ export function useBoundaryDrag({
     if (editable) return;
     const active = activeRef.current;
     activeRef.current = null;
-    if (active) releaseCapture(active.target, active.pointerId);
+    if (active) {
+      releaseCapture(active.target, active.pointerId);
+      active.release();
+    }
   }, [editable]);
+
+  // 언마운트(경계가 사라지는 편집 포함)에서 남은 캡처와 제스처 수를 거둔다.
+  useEffect(
+    () => () => {
+      const active = activeRef.current;
+      activeRef.current = null;
+      if (active) {
+        releaseCapture(active.target, active.pointerId);
+        active.release();
+      }
+    },
+    [],
+  );
 
   const dragging = preview !== null;
   useEffect(() => {
@@ -126,7 +148,8 @@ export function useBoundaryDrag({
     // 캡처 단계 + preventDefault: 이 Esc는 드래그 취소로 쓰였다는 표시다. 팝오버 닫기와
     // 선택 해제(`useShortcuts`, 버블 단계)가 같은 Esc에 또 반응하지 않게 한다. 마운트 순서와 무관.
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
+      // 이미 처리된 Esc에는 반응하지 않는다(한 번의 Esc가 두 겹을 닫지 않게 하는 이중 안전장치).
+      if (e.key !== "Escape" || e.defaultPrevented) return;
       e.preventDefault();
       cancel();
     };
@@ -167,6 +190,7 @@ export function useBoundaryDrag({
         original,
         tick: start,
         target: e.currentTarget,
+        release: beginGesture(),
       };
       setPreview({ index, original, tick: start });
     },
@@ -183,6 +207,7 @@ export function useBoundaryDrag({
       if (!active || e.pointerId !== active.pointerId) return;
       activeRef.current = null;
       releaseCapture(active.target, active.pointerId);
+      active.release();
       setPreview(null);
       // 마지막 미리보기 틱을 커밋한다 — 사용자가 본 것과 같은 값. up 이벤트 자신의 x는
       // 마지막 move와 어긋날 수 있어(브라우저가 move를 합치거나 up 좌표가 다를 때)
