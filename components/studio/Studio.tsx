@@ -4,6 +4,7 @@ import { songLengthTicks } from "@/lib/score/time";
 import { useStudio } from "@/state/useStudio";
 
 import { BeatGrid } from "./BeatGrid";
+import { ChordLane } from "./ChordLane";
 import { Playhead } from "./Playhead";
 import { Ruler } from "./Ruler";
 import { TopBar } from "./TopBar";
@@ -21,8 +22,8 @@ import {
  * 편집 화면의 최상위. `StudioProvider` 안에서 쓴다(Provider는 만들지 않는다).
  *
  * 좌측 헤더 열(고정 폭)과 가로 스크롤되는 타임라인(`data-testid="timeline"`)이
- * 같은 행 높이 상수(`layout.ts`)를 쓴다. 레인 자리(`chord-lane`, `track-lane-<id>`)는
- * 비어 있다 — 코드 레인·트랙 레인은 이후 Task가 이 컨테이너 안을 채운다.
+ * 같은 행 높이 상수(`layout.ts`)를 쓴다. 코드 레인은 `ChordLane`이 그리고, 트랙 레인 자리
+ * (`track-lane-<id>`)는 비어 있다 — 이후 Task가 이 컨테이너 안을 채운다.
  */
 export function Studio() {
   const { song, playing, getEngine } = useStudio();
@@ -80,10 +81,7 @@ export function Studio() {
               <BeatGrid bars={song.bars} beatsPerBar={song.timeSignature[0]} />
               <div className="relative z-10">
                 <Ruler bars={song.bars} />
-                <div
-                  data-testid="chord-lane"
-                  style={{ height: CHORD_LANE_HEIGHT, boxShadow: ROW_DIVIDER }}
-                />
+                <ChordLane />
                 {song.tracks.map((track) => (
                   <div
                     key={track.id}

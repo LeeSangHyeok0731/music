@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { chordPitch } from "@/lib/score/chords";
-import type { Chord } from "@/lib/score/model";
+import { chordLabel, chordPitch } from "@/lib/score/chords";
+import { CHORD_QUALITIES, type Chord } from "@/lib/score/model";
 
 const C_MAJ: Chord = { root: 0, quality: "maj" };
 const A_MIN: Chord = { root: 9, quality: "min" };
@@ -79,6 +79,34 @@ describe("chordPitch", () => {
       expect(() => chordPitch(C_MAJ, degree, 4)).toThrow(
         "degree는 0 이상의 정수여야 합니다",
       );
+    },
+  );
+});
+
+describe("chordLabel", () => {
+  const ROOTS = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+  const SUFFIX = { maj: "", min: "m", dom7: "7", maj7: "maj7", min7: "m7" } as const;
+
+  it("12개 근음 x 5개 종류 전체 표", () => {
+    for (let root = 0; root < 12; root++) {
+      for (const quality of CHORD_QUALITIES) {
+        expect(chordLabel({ root, quality })).toBe(ROOTS[root] + SUFFIX[quality]);
+      }
+    }
+  });
+
+  it("예시 이름", () => {
+    expect(chordLabel(C_MAJ)).toBe("C");
+    expect(chordLabel(A_MIN)).toBe("Am");
+    expect(chordLabel(G_DOM7)).toBe("G7");
+    expect(chordLabel({ root: 6, quality: "maj7" })).toBe("F#maj7");
+    expect(chordLabel({ root: 2, quality: "min7" })).toBe("Dm7");
+  });
+
+  it.each([-1, 12, 1.5, Number.NaN, Number.POSITIVE_INFINITY])(
+    "근음이 0..11의 정수가 아니면(%s) RangeError",
+    (root) => {
+      expect(() => chordLabel({ root, quality: "maj" })).toThrow(RangeError);
     },
   );
 });

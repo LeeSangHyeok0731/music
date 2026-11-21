@@ -28,3 +28,39 @@ export function chordPitch(chord: Chord, degree: number, octave: number): number
   const tone = tones[degree % tones.length];
   return 12 * (octave + 1) + chord.root + tone + 12 * wraps;
 }
+
+/** 근음 이름(샤프 표기). 인덱스가 근음 번호(C=0). */
+export const ROOT_NAMES = [
+  "C",
+  "C#",
+  "D",
+  "D#",
+  "E",
+  "F",
+  "F#",
+  "G",
+  "G#",
+  "A",
+  "A#",
+  "B",
+] as const;
+
+/** 코드 이름 뒤에 붙는 종류 접미. */
+export const QUALITY_SUFFIX: Record<ChordQuality, string> = {
+  maj: "",
+  min: "m",
+  dom7: "7",
+  maj7: "maj7",
+  min7: "m7",
+};
+
+/**
+ * 화면에 보이는 코드 이름: `Am`, `G7`, `F#maj7`. 근음이 0..11의 정수가 아니면
+ * 이름을 만들 수 없으므로 RangeError(`undefined`가 이름에 섞이지 않게 한다).
+ */
+export function chordLabel(chord: Chord): string {
+  if (!Number.isInteger(chord.root) || chord.root < 0 || chord.root > 11) {
+    throw new RangeError(`root는 0..11의 정수여야 합니다: ${chord.root}`);
+  }
+  return ROOT_NAMES[chord.root] + QUALITY_SUFFIX[chord.quality];
+}
