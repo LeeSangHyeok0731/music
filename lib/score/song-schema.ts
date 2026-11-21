@@ -8,6 +8,7 @@ import {
   MAX_TEMPO,
   MIN_TEMPO,
   SONG_VERSION,
+  type ChordSegment,
   type Clip,
   type Song,
 } from "./model";
@@ -15,8 +16,10 @@ import { validateSong } from "./validate";
 
 /**
  * 구조를 본다. 틱(start·length)·pitch·velocity·템포·마디 수의 정수성·범위와
- * 클립·음의 정렬·겹침은 여기서 보지 않는다 — 복구할 수 있는 것은 `repair`가
- * 고치고, 나머지는 `validateSong`이 거부한다.
+ * 클립·음·코드 진행 구간의 정렬·겹침·빈틈은 여기서 보지 않는다 — 복구할 수 있는
+ * 것(소수 틱의 끝점 반올림, start 정렬)은 `repair`가 고치고, 나머지(진행이 곡을
+ * 덮지 못함 등)는 `validateSong`이 거부한다. 코드 진행은 여기서 최소 한 구간인지만
+ * 본다.
  *
  * 예외로 여기서 정수성·범위까지 보는 값:
  * - `timeSignature`: 곡 길이(`bars × ticksPerBar`)를 정하므로 무제한이면 `MAX_BARS`
@@ -39,13 +42,15 @@ const chordSchema = z.object({
 });
 
 const bodySchema = z.discriminatedUnion("type", [
-  z.object({
-    type: z.literal("chord"),
-    chord: chordSchema,
-    pattern: z.string().min(1),
-  }),
+  z.object({ type: z.literal("pattern"), pattern: z.string().min(1) }),
   z.object({ type: z.literal("notes"), notes: z.array(noteSchema) }),
 ]);
+
+const segmentSchema = z.object({
+  start: z.number(),
+  length: z.number(),
+  chord: chordSchema,
+});
 
 const clipSchema = z.object({
   id: z.string().min(1),
@@ -81,6 +86,7 @@ const songSchema = z.object({
     z.literal(BEAT_UNITS),
   ]),
   bars: z.number(),
+  progression: z.array(segmentSchema).min(1),
   tracks: z.array(trackSchema).min(1),
   meta: metaSchema,
 });
@@ -130,6 +136,7 @@ function repair(song: Song, repairs: string[]): Song {
   let trimmed = 0;
   let dropped = 0;
   let resorted = false;
+  let resortedProgression = false;
 
   /**
    * 소수 틱 구간을 정수 틱으로 바꾼다. start와 length를 따로 반올림하지 않고 양
@@ -157,13 +164,24 @@ function repair(song: Song, repairs: string[]): Song {
     repairs.push(`템포를 정수로 반올림했습니다 (${song.tempo} → ${tempo})`);
   }
 
+  // 진행 구간도 클립과 같이 끝점을 반올림하고 start로 정렬한다. 빈틈·겹침은 고치지
+  // 않는다 — 반올림한 정수 끝점으로 validateSong이 판정해 거부한다.
+  const roundedProgression: ChordSegment[] = song.progression.map((seg) => ({
+    ...seg,
+    ...roundSpan(seg.start, seg.length),
+  }));
+  const progression = [...roundedProgression].sort((a, b) => a.start - b.start);
+  if (progression.some((seg, i) => seg !== roundedProgression[i])) {
+    resortedProgression = true;
+  }
+
   const tracks = song.tracks.map((track) => {
     let clips: Clip[] = track.clips.map((clip) => {
       // 클립과 음 모두 끝점을 반올림한다(`roundSpan`). 음이 클립 끝을 넘는지도
       // 반올림한 정수 끝점으로 판정하므로 1틱 미만의 초과는 잘리지 않는다.
       const { start, length } = roundSpan(clip.start, clip.length);
 
-      if (clip.body.type === "chord") {
+      if (clip.body.type === "pattern") {
         return { ...clip, start, length };
       }
 
@@ -214,6 +232,9 @@ function repair(song: Song, repairs: string[]): Song {
   if (trimmed > 0) repairs.push(`클립 끝을 넘은 음 ${trimmed}개를 클립 끝에서 잘랐습니다`);
   if (dropped > 0) repairs.push(`클립 밖에서 시작하는 음 ${dropped}개를 버렸습니다`);
   if (resorted) repairs.push("클립 또는 음의 순서를 start 순으로 정렬했습니다");
+  if (resortedProgression) {
+    repairs.push("코드 진행 구간의 순서를 start 순으로 정렬했습니다");
+  }
 
-  return { ...song, tempo, tracks };
+  return { ...song, tempo, progression, tracks };
 }

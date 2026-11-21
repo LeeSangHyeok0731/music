@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import type { Clip, Song } from "@/lib/score/model";
+import type {
+  Chord,
+  ChordQuality,
+  ChordSegment,
+  Clip,
+  Song,
+} from "@/lib/score/model";
+import { defaultProgression } from "@/lib/score/progression";
 import { songWithNotes } from "@/lib/score/testing/builders";
 import { ticksPerBar } from "@/lib/score/time";
 import { validateSong, type ScoreIssueCode } from "@/lib/score/validate";
@@ -224,13 +231,23 @@ describe("validateSong — 곡과 패턴", () => {
     expect(validateSong(songWithNotes({ notes: [], bars: 500 }))).toEqual([]);
   });
 
-  it("bars가 0이거나 상한을 넘거나 소수면 bars-out-of-range", () => {
-    // 클립 없는 곡에서 bars만 바꿔 다른 이슈가 끼지 않게 한다.
-    for (const bars of [0, 501, 1.5]) {
+  it("bars가 상한을 넘거나 소수면 bars-out-of-range", () => {
+    // 클립 없는 곡에서 bars만 바꿔 다른 이슈가 끼지 않게 한다. 진행은 곡 길이에서
+    // 파생되는 끝에 닿아야 하므로 바뀐 bars로 다시 만든다.
+    for (const bars of [501, 1.5]) {
       const song = withClips([]);
       song.bars = bars;
+      song.progression = defaultProgression(bars, [4, 4]);
       expect(codes(song)).toEqual(["bars-out-of-range"]);
     }
+  });
+
+  it("bars 0이면 bars-out-of-range와 함께 진행도 곡을 덮지 못한다", () => {
+    // 연쇄 이슈: 곡 길이 0을 덮는 진행은 없다(구간 길이 ≥ 1). 진행은 그대로 두었으므로
+    // 3840틱짜리 구간이 곡 끝(0)을 넘는다.
+    const song = withClips([]);
+    song.bars = 0;
+    expect(codes(song)).toEqual(["bars-out-of-range", "progression-invalid"]);
   });
 
   it("bars 0인 곡은 곡을 덮는 클립도 길이 0이 되어 함께 걸린다", () => {
@@ -247,7 +264,7 @@ describe("validateSong — 곡과 패턴", () => {
         id: "a",
         start: 0,
         length: 1920,
-        body: { type: "chord", chord: { root: 0, quality: "maj" }, pattern: "nope" },
+        body: { type: "pattern", pattern: "nope" },
       },
     ]);
     expect(codes(song)).toEqual(["unknown-pattern"]);
@@ -259,11 +276,7 @@ describe("validateSong — 곡과 패턴", () => {
         id: "a",
         start: 0,
         length: 1920,
-        body: {
-          type: "chord",
-          chord: { root: 0, quality: "maj" },
-          pattern: "piano-block",
-        },
+        body: { type: "pattern", pattern: "piano-block" },
       },
     ]);
     song.tracks[0].instrument = "drums";
@@ -276,11 +289,7 @@ describe("validateSong — 곡과 패턴", () => {
         id: "a",
         start: 0,
         length: 1920,
-        body: {
-          type: "chord",
-          chord: { root: 0, quality: "maj" },
-          pattern: "drum-basic-rock",
-        },
+        body: { type: "pattern", pattern: "drum-basic-rock" },
       },
     ]);
     expect(codes(song)).toEqual(["pattern-instrument-mismatch"]);
@@ -300,6 +309,7 @@ describe("validateSong — 곡과 패턴", () => {
     const song = songWithNotes({ notes: [note(0, 480)] });
     song.timeSignature = ts;
     song.tracks[0].clips[0].length = ticksPerBar(ts);
+    song.progression = defaultProgression(1, ts);
     expect(validateSong(song)).toEqual([]);
   });
 
@@ -310,8 +320,10 @@ describe("validateSong — 곡과 패턴", () => {
     [4.5, 4],
   ])("박자표 %s/%s는 invalid-time-signature 하나만 낸다", (beats, unit) => {
     // 이 박자표들은 한 마디가 1920틱 이상이라 1920틱 클립이 곡 안에 남는다.
+    // 진행은 곡 끝(1마디 = ticksPerBar)에 닿아야 하므로 그 박자표로 다시 만든다.
     const song = songWithNotes({ notes: [] });
     song.timeSignature = [beats, unit];
+    song.progression = defaultProgression(1, song.timeSignature);
     expect(validateSong(song).map((i) => [i.code, i.path])).toEqual([
       ["invalid-time-signature", "timeSignature"],
     ]);
@@ -323,7 +335,8 @@ describe("validateSong — 곡과 패턴", () => {
     [4, 64],
   ])("박자표 %s/%s는 invalid-time-signature", (beats, unit) => {
     // 연쇄 이슈: 곡 길이가 bars × ticksPerBar(박자표)로 파생되므로 이 박자표에서는
-    // 한 마디가 1920틱보다 짧아져 클립에 clip-out-of-range도 함께 난다.
+    // 한 마디가 1920틱보다 짧아져 클립에 clip-out-of-range, 진행에 progression-invalid도
+    // 함께 난다.
     // 박자표 이슈와 그 위치만 단언한다.
     const song = songWithNotes({ notes: [] });
     song.timeSignature = [beats, unit];
@@ -349,5 +362,113 @@ describe("validateSong — 곡과 패턴", () => {
     expect(issues.map((i) => [i.code, i.path])).toEqual([
       ["pitch-out-of-range", "tracks[0].clips[0].notes[1]"],
     ]);
+  });
+});
+
+const C: Chord = { root: 0, quality: "maj" };
+const F: Chord = { root: 5, quality: "maj" };
+const seg = (start: number, length: number, chord: Chord = C): ChordSegment => ({
+  start,
+  length,
+  chord,
+});
+
+/** 2마디(3840틱), 클립 없는 곡에 주어진 진행을 넣는다. */
+function withProgression(progression: ChordSegment[]): Song {
+  const song = withClips([]);
+  song.progression = progression;
+  return song;
+}
+
+describe("validateSong — 코드 진행", () => {
+  it("빈틈·겹침 없이 곡을 덮는 진행은 통과한다", () => {
+    expect(validateSong(withProgression([seg(0, 1920, C), seg(1920, 1920, F)]))).toEqual(
+      [],
+    );
+  });
+
+  it("반마디보다 짧은 구간도 모델은 받는다(length ≥ 1만 요구)", () => {
+    expect(validateSong(withProgression([seg(0, 100, C), seg(100, 3740, F)]))).toEqual(
+      [],
+    );
+  });
+
+  it("빈 진행은 progression-invalid", () => {
+    expect(codes(withProgression([]))).toEqual(["progression-invalid"]);
+  });
+
+  it("0에서 시작하지 않으면 progression-invalid", () => {
+    expect(codes(withProgression([seg(480, 3360)]))).toEqual(["progression-invalid"]);
+  });
+
+  it("구간 사이에 빈틈이 있으면 progression-invalid", () => {
+    expect(codes(withProgression([seg(0, 960, C), seg(1920, 1920, F)]))).toEqual([
+      "progression-invalid",
+    ]);
+  });
+
+  it("구간이 겹치면 progression-invalid", () => {
+    expect(codes(withProgression([seg(0, 2000, C), seg(1920, 1920, F)]))).toEqual([
+      "progression-invalid",
+    ]);
+  });
+
+  it("곡 끝에 못 미치면 progression-invalid", () => {
+    expect(codes(withProgression([seg(0, 1920)]))).toEqual(["progression-invalid"]);
+  });
+
+  it("곡 끝을 넘으면 progression-invalid", () => {
+    expect(codes(withProgression([seg(0, 5000)]))).toEqual(["progression-invalid"]);
+  });
+
+  it("이슈의 path는 progression을 가리킨다", () => {
+    expect(
+      validateSong(withProgression([seg(0, 1920)])).map((i) => [i.code, i.path]),
+    ).toEqual([["progression-invalid", "progression"]]);
+  });
+
+  it("소수 틱 구간은 non-integer-tick", () => {
+    // 두 구간 모두 소수라 둘 다 걸린다. 끝점이 맞닿아 progression-invalid는 나지 않지만
+    // 연쇄 이슈는 검사 순서에 묶이므로 포함 여부와 첫 위치만 단언한다.
+    const issues = validateSong(
+      withProgression([seg(0, 960.5, C), seg(960.5, 2879.5, F)]),
+    );
+    expect(issues.map((i) => i.code)).toContain("non-integer-tick");
+    expect(issues.find((i) => i.code === "non-integer-tick")?.path).toBe(
+      "progression[0]",
+    );
+  });
+
+  it("길이 0 구간은 non-positive-length", () => {
+    const issues = validateSong(withProgression([seg(0, 0, C), seg(0, 3840, F)]));
+    expect(issues.map((i) => i.code)).toContain("non-positive-length");
+    expect(issues.find((i) => i.code === "non-positive-length")?.path).toBe(
+      "progression[0]",
+    );
+  });
+
+  it("알 수 없는 코드 종류는 invalid-chord", () => {
+    const aug = { root: 0, quality: "aug" as unknown as ChordQuality };
+    expect(codes(withProgression([seg(0, 3840, aug)]))).toEqual(["invalid-chord"]);
+  });
+
+  it.each([12, 1.5, -1, Number.NaN])("근음 %s는 invalid-chord", (root) => {
+    const issues = validateSong(
+      withProgression([seg(0, 1920, C), seg(1920, 1920, { root, quality: "maj" })]),
+    );
+    expect(issues.map((i) => [i.code, i.path])).toEqual([
+      ["invalid-chord", "progression[1]"],
+    ]);
+  });
+
+  it("근음 0과 11은 통과한다", () => {
+    expect(
+      validateSong(
+        withProgression([
+          seg(0, 1920, { root: 0, quality: "min7" }),
+          seg(1920, 1920, { root: 11, quality: "dom7" }),
+        ]),
+      ),
+    ).toEqual([]);
   });
 });

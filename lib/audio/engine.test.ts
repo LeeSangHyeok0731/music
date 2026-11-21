@@ -462,20 +462,12 @@ describe("Engine setSong — 잘못된 곡은 엔진을 바꾸지 않는다", ()
     {
       name: "알 수 없는 패턴, 같은 트랙 id",
       trackId: "track-old",
-      body: {
-        type: "chord",
-        chord: { root: 0, quality: "maj" },
-        pattern: "no-such-pattern",
-      },
+      body: { type: "pattern", pattern: "no-such-pattern" },
     },
     {
       name: "피아노 트랙의 드럼 패턴, 다른 트랙 id",
       trackId: "track-new",
-      body: {
-        type: "chord",
-        chord: { root: 0, quality: "maj" },
-        pattern: "drum-basic-rock",
-      },
+      body: { type: "pattern", pattern: "drum-basic-rock" },
     },
   ] satisfies Array<{ name: string; trackId: string; body: ClipBody }>)(
     "$name: 예외를 던지고 옛 곡이 그대로 재생된다",

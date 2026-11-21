@@ -1,47 +1,50 @@
-import type { Chord, Clip, Song, Track } from "./model";
+import type { ChordSegment, Clip, Song, Track } from "./model";
 import { ticksPerBar } from "./time";
 
 export const DEMO_BARS = 8;
 
 const BAR = ticksPerBar([4, 4]);
 
-/** C - Am - F - G7, 각 2마디. */
-const PROGRESSION: Chord[] = [
-  { root: 0, quality: "maj" },
-  { root: 9, quality: "min" },
-  { root: 5, quality: "maj" },
-  { root: 7, quality: "dom7" },
-];
+/** C - Am - F - G7, 각 2마디. 곡의 코드는 여기서만 정한다. */
+function demoProgression(): ChordSegment[] {
+  return [
+    { root: 0, quality: "maj" as const },
+    { root: 9, quality: "min" as const },
+    { root: 5, quality: "maj" as const },
+    { root: 7, quality: "dom7" as const },
+  ].map((chord, i) => ({ start: i * 2 * BAR, length: 2 * BAR, chord }));
+}
 
-function chordClips(prefix: string, pattern: string): Clip[] {
-  return PROGRESSION.map((chord, i) => ({
+/** 2마디짜리 패턴 클립 4개. 코드는 클립이 아니라 곡의 진행이 정한다. */
+function patternClips(prefix: string, pattern: string): Clip[] {
+  return [0, 1, 2, 3].map((i) => ({
     id: `${prefix}-${i}`,
     start: i * 2 * BAR,
     length: 2 * BAR,
-    body: { type: "chord", chord, pattern },
+    body: { type: "pattern", pattern },
   }));
 }
 
 /**
- * 소리 검증 화면이 쓰는 데모 곡. 코드·패턴 클립과 음 클립, 악기 4종을 모두 쓴다.
- * 매 호출마다 새 객체를 돌려준다.
+ * 데모 곡. 코드 진행 위에 악기 4종의 패턴 클립을 깐다. 매 호출마다 새 객체를
+ * 돌려준다.
  */
 export function buildDemoSong(): Song {
   const tracks: Track[] = [
     {
       id: "track-piano",
       instrument: "piano",
-      clips: chordClips("piano", "piano-arpeggio-8th"),
+      clips: patternClips("piano", "piano-arpeggio-8th"),
     },
     {
       id: "track-guitar",
       instrument: "guitar",
-      clips: chordClips("guitar", "guitar-strum-quarter"),
+      clips: patternClips("guitar", "guitar-strum-quarter"),
     },
     {
       id: "track-bass",
       instrument: "bass",
-      clips: chordClips("bass", "bass-root-quarter"),
+      clips: patternClips("bass", "bass-root-quarter"),
     },
     {
       id: "track-drums",
@@ -51,44 +54,18 @@ export function buildDemoSong(): Song {
           id: "drums-0",
           start: 0,
           length: DEMO_BARS * BAR,
-          body: {
-            type: "chord",
-            // 드럼 패턴은 코드를 읽지 않는다. 스키마가 코드를 요구하므로 자리만 채운다.
-            chord: { root: 0, quality: "maj" },
-            pattern: "drum-basic-rock",
-          },
-        },
-      ],
-    },
-    {
-      id: "track-melody",
-      instrument: "piano",
-      clips: [
-        {
-          id: "melody-0",
-          start: 4 * BAR,
-          length: 2 * BAR,
-          body: {
-            type: "notes",
-            notes: [
-              { start: 0, length: 480, pitch: 72, velocity: 0.7 },
-              { start: 480, length: 480, pitch: 76, velocity: 0.7 },
-              { start: 960, length: 480, pitch: 79, velocity: 0.7 },
-              { start: 1440, length: 480, pitch: 76, velocity: 0.7 },
-              { start: 1920, length: 960, pitch: 77, velocity: 0.7 },
-              { start: 2880, length: 960, pitch: 74, velocity: 0.7 },
-            ],
-          },
+          body: { type: "pattern", pattern: "drum-basic-rock" },
         },
       ],
     },
   ];
 
   return {
-    v: 2,
+    v: 3,
     tempo: 120,
     timeSignature: [4, 4],
     bars: DEMO_BARS,
+    progression: demoProgression(),
     tracks,
     meta: { title: "데모 곡", editors: [] },
   };

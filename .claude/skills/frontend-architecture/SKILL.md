@@ -15,23 +15,18 @@ Bandline은 Next.js App Router 프론트엔드다:
 - Tailwind CSS 4
 - Web Audio API (브라우저 네이티브, 서버 렌더링 불가)
 
-**현재 실제 상태:**
+**현재 구조** (정확한 배치와 각 폴더의 역할은 `.claude/rules/frontend-architecture.md`의 디렉터리 구조):
 
 ```text
-app/    layout.tsx, page.tsx, globals.css, favicon.ico
-public/ create-next-app 기본 SVG들
-```
-
-**계획된 구조** (아직 없음 — 만들 때 이 배치를 따른다):
-
-```text
-lib/score/          곡 데이터 모델. 순수 TS
+app/                `/` = StudioProvider로 감싼 Studio (편집 화면)
+lib/score/          곡 데이터 모델 v3와 편집 규칙(edit.ts). 순수 TS
 lib/audio/          오디오 엔진. React 없음
-components/editor/  피아노롤, 타임라인, 트랙 헤더
-components/ui/      공용 컨트롤
-state/              StudioProvider
-public/samples/     악기 샘플
+components/studio/  편집 화면 UI
+state/              StudioProvider, useStudio
+public/samples/     CC0 샘플 팩
 ```
+
+`components/ui/`(공용 컨트롤)는 아직 없다.
 
 `src/`도, 데이터 레이어도, 서버 API도 없다. FSD 레이어나 상태 라이브러리를 이 규모에 도입하지 않는다.
 
