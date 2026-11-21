@@ -20,7 +20,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 - `lib/score/` — 곡 모델 v3(`model.ts`), 틱·마디 변환(`time.ts`), 코드 음정(`chords.ts`), 패턴 카탈로그(`patterns.ts`), 코드 진행 조회(`progression.ts`: `chordAt`), 펼치기·베이크(`expand.ts`: `expandSong`/`bakeClip`), 불변식 검증(`validate.ts`), zod 스키마와 복구(`song-schema.ts`: `parseSong`), 데모 곡(`demo-song.ts`), **편집 규칙(`edit.ts`)**, 실행취소 순수 규칙(`history.ts`, 50칸), 자동 저장 직렬화(`autosave.ts`), 마디 축소 판정(`bars.ts`), 패턴 표시 이름(`pattern-labels.ts`)
 - `lib/audio/` — AudioContext, look-ahead 스케줄러, 보이스 풀, 메트로놈, `SampleBank`(`samples/`), 샘플 악기(`instruments/sampler.ts`), `Engine`
 - `state/` — `StudioProvider`(Engine 하나·곡 히스토리·재생 상태 기계·자동 저장을 소유), `useStudio()`
-- `components/studio/` — `/`의 편집 화면: 코드 진행 레인 + 고정 4트랙(피아노·기타·베이스·드럼, 추가·삭제 없음), 패턴 클립 추가·이동·길이·삭제, 코드·패턴 팝오버, 마디 1~64(UI 한도) 추가·삭제, 되돌리기(다시실행 없음), 단축키(Space, Ctrl/Cmd+Z, Delete/Backspace, Esc 겹겹이 닫기). 곡은 `localStorage` 키 `bandline:song:v3`에 자동 저장·복원한다
+- `components/studio/` — `/`의 편집 화면: 코드 진행 레인 + 고정 4트랙(피아노·기타·베이스·드럼, 추가·삭제 없음), 패턴 클립 추가·이동·길이·삭제, 코드·패턴 팝오버, 마디 1~64(UI 한도) 추가·삭제, 되돌리기(다시실행 없음), 단축키(Space — 샘플 받는 대기 중에도 정지, Ctrl/Cmd+Z, Delete/Backspace, Esc 겹겹이 닫기). 곡은 `localStorage` 키 `bandline:song:v3`에 자동 저장·복원한다
 
 **규칙의 단일 출처:** 편집 규칙(스냅 960틱·클램프·겹침 방지·최소 길이)은 `lib/score/edit.ts`의 순수 함수에만 둔다. 같은 참조를 돌려주면 no-op이고, 결과는 항상 `validateSong`을 통과한다. 훅·컴포넌트에 규칙을 두지 않는다. **편집은 정지 중에만** 된다(엔진 `setSong`이 재생 중·재생 대기 중 `false`이므로).
 
@@ -34,7 +34,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 **엔진 계약** (상세는 2026-11-20 spec 4절)
 - **템포는 `song.tempo`가 유일한 진실이다.** `Engine.setSong`이 곡·이벤트·템포·악기 맵을 한 번에 맞춘다.
 - **재생 중에는 곡을 바꿀 수 없다.** `setSong`은 `false`를 돌려주고 아무것도 바꾸지 않는다(재생 중 허용되는 것은 `setTempo`뿐). `play()`가 컨텍스트 재개(`ensureRunning`)와 샘플 로딩을 기다리는 동안에도 `false`이고 `isPlaying()`은 `true`다. 편집 UI는 이 구간을 "재생 중"으로 표시하지 말고 `false`를 반드시 처리해야 한다.
-- 타입이 맞는 `Song` 기준으로, `setSong`이 던지는 것은 패턴이 잘못된 곡(모르는 패턴 id, 트랙 악기와 맞지 않는 패턴)뿐이고 그때 엔진은 그대로다. 겹침·`bars`·박자표·정수 틱 같은 나머지 불변식은 검사하지 않는다. 파일·링크처럼 믿을 수 없는 입력은 반드시 `parseSong`을 거친다(모르는 `quality`·악기·패턴·버전을 거부한다) — `validateSong`은 이미 타입이 맞는 곡의 구조 불변식(진행이 곡을 덮는지, 코드 값 `invalid-chord` 포함)만 보며 `parseSong`의 대체가 아니다.
+- 타입이 맞는 `Song` 기준으로, `setSong`이 던지는 것은 패턴이 잘못된 곡(모르는 패턴 id, 트랙 악기와 맞지 않는 패턴) 또는 진행이 곡을 덮지 않거나 코드가 잘못된 곡(`chordAt`의 `RangeError`, `chordPitch` 오류)뿐이고 그때 엔진은 그대로다. 겹침·`bars`·박자표·정수 틱 같은 나머지 불변식은 검사하지 않는다. 파일·링크처럼 믿을 수 없는 입력은 반드시 `parseSong`을 거친다(모르는 `quality`·악기·패턴·버전을 거부한다) — `validateSong`은 이미 타입이 맞는 곡의 구조 불변식(진행이 곡을 덮는지, 코드 값 `invalid-chord` 포함)만 보며 `parseSong`의 대체가 아니다.
 - `play()`는 `PlayResult`를 돌려준다. 곡이 쓰는 악기의 샘플 준비(다운로드·디코드)가 끝나야 시작하고, 준비에 실패한 악기가 있으면 `not-ready`다. 샘플은 AudioContext 없이 `prefetch`로 받고(생성자·`setSong`이 부른다) 디코드는 컨텍스트가 생긴 `play()`에서 한다. `play()`의 await는 둘이고 `ensureRunning`이 먼저(사용자 제스처 안)이며 그다음이 `bank.ensureReady`다 — 각각 뒤에서 세션 번호를 다시 확인한다.
 
 아직 없는 것: **편집 UI의 나머지(하위 프로젝트 2b) — 음 단위 편집·피아노롤, 클립 복사/붙여넣기, 다시실행, 트랙 추가·삭제, 곡 파일 열기·저장 UI**, 루프·시크·줌, **링크 공유·서명 검증·모바일 재생 뷰(3), 오디오 내보내기(4), 악보 PDF 가져오기(5)**. (`pnpm gen:dev-samples`의 합성 톤은 파이프라인 점검용이고 `public/samples-dev/`(gitignore)에 쓴다.)
