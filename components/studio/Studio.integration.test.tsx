@@ -69,15 +69,25 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  cleanup();
+  // 소음 검사는 복원이 끝난 뒤에 한다. 먼저 단언하면 한 테스트의 실패가 복원을 건너뛰어
+  // fake timers·전역 스텁이 다음 테스트로 새어 나간다.
+  let errorCalls: unknown[][] = [];
+  let warnCalls: unknown[][] = [];
+  try {
+    cleanup();
+  } finally {
+    // 언마운트가 내는 소음도 센다.
+    errorCalls = [...errors.mock.calls];
+    warnCalls = [...warnings.mock.calls];
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+    restorePointer();
+    restoreAudio();
+  }
   // 경고·act 소음이 하나라도 있으면 실패한다.
-  expect(errors).not.toHaveBeenCalled();
-  expect(warnings).not.toHaveBeenCalled();
-  vi.useRealTimers();
-  vi.unstubAllGlobals();
-  vi.restoreAllMocks();
-  restorePointer();
-  restoreAudio();
+  expect(errorCalls).toEqual([]);
+  expect(warnCalls).toEqual([]);
 });
 
 /** 전체 트리를 마운트하고 가장 최근 `StudioApi`를 읽는 창을 돌려준다(읽기 전용으로만 쓴다). */

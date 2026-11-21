@@ -33,7 +33,7 @@ describe("shrinkDiscardsClips", () => {
     expect(shrinkDiscardsClips(before, setBars(before, 2))).toBe(false);
   });
 
-  it("클립이 지워지면 참이다", () => {
+  it("setBars가 0을 1로 올려 잘라도 클립이 짧아지면 참이다", () => {
     const before = sparse();
     expect(shrinkDiscardsClips(before, setBars(before, 0))).toBe(true);
     const after = setBars(before, 1);
@@ -62,6 +62,34 @@ describe("shrinkDiscardsClips", () => {
     });
     const after = setBars(before, 3);
     expect(after.tracks[0].clips).toHaveLength(1);
+    expect(shrinkDiscardsClips(before, after)).toBe(true);
+  });
+
+  it("같은 클립 id를 다른 트랙이 써도 트랙별로 짝지어 사라진 클립을 놓치지 않는다", () => {
+    const before = songWithPatterns({
+      bars: 4,
+      tracks: [
+        {
+          id: "t-piano",
+          instrument: "piano",
+          clips: [{ id: "clip-1", start: 3 * BAR, length: BAR, pattern: "piano-block" }],
+        },
+        {
+          id: "t-bass",
+          instrument: "bass",
+          clips: [{ id: "clip-1", start: 0, length: BAR, pattern: "bass-root-quarter" }],
+        },
+      ],
+    });
+    const after = setBars(before, 3);
+    expect(after.tracks[0].clips).toHaveLength(0); // 피아노의 clip-1은 사라졌고
+    expect(after.tracks[1].clips).toHaveLength(1); // 베이스의 clip-1은 남았다
+    expect(shrinkDiscardsClips(before, after)).toBe(true);
+  });
+
+  it("줄인 곡에서 트랙이 없어지면 그 트랙의 클립은 사라진 것으로 친다", () => {
+    const before = sparse();
+    const after: Song = { ...before, bars: 3, tracks: [] };
     expect(shrinkDiscardsClips(before, after)).toBe(true);
   });
 
