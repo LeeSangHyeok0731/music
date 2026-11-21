@@ -25,6 +25,7 @@ import {
   type History,
 } from "@/lib/score/history";
 import { INSTRUMENT_IDS, type InstrumentId, type Song } from "@/lib/score/model";
+import * as Notes from "@/lib/score/notes";
 import { songLengthTicks, ticksToBarBeat } from "@/lib/score/time";
 
 import type {
@@ -69,6 +70,8 @@ const SAVE_FAILED = "브라우저에 저장하지 못했습니다";
 const EDIT_FAILED = "편집을 적용하지 못했습니다";
 const ENGINE_SYNC_FAILED = "곡을 엔진에 적용하지 못했습니다";
 const BARS_SHRUNK = "마디를 줄였습니다 — 되돌리기로 복구할 수 있습니다";
+const CLIP_BAKED =
+  "음으로 바꿨습니다 — 코드 진행을 바꿔도 이 클립은 따라가지 않습니다. 되돌리기로 복구할 수 있습니다";
 
 function notReadyMessage(failed: readonly InstrumentId[]): string {
   const names = failed.map((i) => INSTRUMENT_LABEL[i]).join(", ");
@@ -351,6 +354,21 @@ export function StudioProvider({
         if (shrinkDiscardsClips(before, historyRef.current.present)) {
           showMessage(BARS_SHRUNK);
         }
+      },
+      bakeClipToNotes: (...a) => {
+        const before = historyRef.current.present;
+        applyEdit((s) => Notes.bakeClipToNotes(s, ...a));
+        // 곡이 실제로 바뀌었을 때만 알린다(이미 notes거나 막히거나 던졌으면 곡이 그대로다).
+        if (historyRef.current.present !== before) showMessage(CLIP_BAKED);
+      },
+      emptyNotesClip: (...a) =>
+        applyEdit((s) => Notes.emptyNotesClip(s, ...a)),
+      notes: {
+        addNote: (...a) => applyEdit((s) => Notes.addNote(s, ...a)),
+        moveNotes: (...a) => applyEdit((s) => Notes.moveNotes(s, ...a)),
+        resizeNotes: (...a) => applyEdit((s) => Notes.resizeNotes(s, ...a)),
+        removeNotes: (...a) => applyEdit((s) => Notes.removeNotes(s, ...a)),
+        setVelocities: (...a) => applyEdit((s) => Notes.setVelocities(s, ...a)),
       },
     }),
     [applyEdit, showMessage],

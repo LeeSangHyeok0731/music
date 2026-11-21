@@ -6,6 +6,7 @@ import type { StudioApi } from "@/state/types";
 import { useStudio } from "@/state/useStudio";
 
 import { hasActiveGesture } from "./gestures";
+import { hasOpenModal } from "./modal";
 
 /**
  * 전역 단축키. `Studio`가 한 번만 부른다. `document`의 `keydown` 리스너 하나(버블 단계)와 Space의
@@ -16,8 +17,8 @@ import { hasActiveGesture } from "./gestures";
  * | --- | --- | --- |
  * | Space | 재생 중이거나 재생 대기 중이면 `stop()`, 아니면 `play()` | 반복 입력 무시. 아래 "Space와 네이티브" 대상 위에서는 처리 안 함 |
  * | Ctrl/Cmd+Z | `undo()` | `editable && canUndo`, 진행 중 드래그 없음. 텍스트 입력 위에서는 처리 안 함. Shift·Alt 변형은 처리 안 함. `key`가 z이거나 물리 키가 KeyZ |
- * | Delete / Backspace | 선택한 클립 삭제 | `editable`, 선택 있음. 텍스트 입력·select·대화상자 안에서는 처리 안 함 |
- * | Esc | 선택 해제 | 선택 있음 |
+ * | Delete / Backspace | 선택한 클립 삭제 | `editable`, 선택 있음. 텍스트 입력·select·대화상자 안에서는 처리 안 함. 모달이 열려 있으면 처리 안 함 |
+ * | Esc | 선택 해제 | 선택 있음. 모달이 열려 있으면 처리 안 함 |
  *
  * 공통: 이미 `defaultPrevented`인 이벤트(다른 곳이 처리함)와 `isComposing`, 문자열이 아닌 `key`는
  * 무시한다. Space·Delete·Backspace는 Ctrl/Meta/Alt가 눌려 있으면 무시한다(Shift는 허용). 처리했을
@@ -30,6 +31,9 @@ import { hasActiveGesture } from "./gestures";
  * `[role=button]`, `[role=separator]`, 버튼형 `input`)뿐이다. 마우스로 포커스된 버튼과 range 슬라이더
  * (Space 동작이 없다) 위에서는 재생/정지한다. 처리한 Space의 `keyup`은 막는다(브라우저에 따라 버튼의
  * 클릭이 keyup에서 일어난다).
+ *
+ * **모달:** 모달이 열려 있는 동안(`hasOpenModal()`) 이 리스너는 Delete/Backspace(클립 삭제)와 Esc(선택 해제)를
+ * 처리하지 않는다 — 모달이 자기 키를 처리한다(음 삭제, 모달 닫기). Space·Ctrl+Z는 그대로다.
  *
  * **Esc 단계:** 한 번의 Esc는 한 겹만 닫는다 — 진행 중인 드래그 → 열린 팝오버 → 선택. 드래그 훅과
  * 팝오버 훅이 **캡처 단계** 리스너에서 처리하고 `preventDefault`로 표시하므로, 이 버블 단계
@@ -127,7 +131,7 @@ export function useShortcuts(): void {
       const target = e.target instanceof Element ? e.target : null;
 
       if (e.key === "Escape") {
-        if (!studio.selection) return;
+        if (hasOpenModal() || !studio.selection) return;
         studio.select(null);
         return;
       }
@@ -161,7 +165,7 @@ export function useShortcuts(): void {
       }
 
       if (e.key === "Delete" || e.key === "Backspace") {
-        if (hasCommandModifier(e)) return;
+        if (hasCommandModifier(e) || hasOpenModal()) return;
         if (isTextLike(target) || target?.closest('select, [role="dialog"]')) {
           return;
         }

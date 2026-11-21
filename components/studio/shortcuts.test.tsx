@@ -32,6 +32,7 @@ import {
   xAt,
 } from "./testing/pointer";
 import { hasActiveGesture } from "./gestures";
+import { hasOpenModal, useModalOpenCount } from "./modal";
 import { useShortcuts } from "./useShortcuts";
 
 let restoreAudio: () => void;
@@ -66,6 +67,8 @@ afterEach(() => {
   cleanup();
   // 제스처 수가 새면(어느 종료 경로가 해제를 빼먹으면) 다음 테스트로 번진다.
   expect(hasActiveGesture()).toBe(false);
+  // 모달 카운터가 새면 다음 테스트의 Delete/Esc가 조용히 무시된다.
+  expect(hasOpenModal()).toBe(false);
   vi.useRealTimers();
   vi.restoreAllMocks();
   restorePointer();
@@ -1082,6 +1085,98 @@ describe("Esc — 한 번에 한 겹만 닫는다(드래그 → 팝오버 → �
     expect(h.studio().canUndo).toBe(true);
     expect(esc().defaultPrevented).toBe(false);
     expect(selected(h)).toBeNull();
+  });
+});
+
+/** 모달 흉내: 열린 동안 모달 카운터를 올린다(실제 모달이 하는 일). */
+function FakeModal({ open }: { open: boolean }) {
+  useModalOpenCount(open);
+  return null;
+}
+
+describe("모달이 열려 있는 동안", () => {
+  function renderWithModal(): { h: StudioHarness; setOpen(open: boolean): void } {
+    const OPEN = "open-modal";
+    const CLOSE = "close-modal";
+    function Toggle() {
+      const [open, setOpen] = useState(false);
+      return (
+        <>
+          <FakeModal open={open} />
+          <button type="button" data-testid={OPEN} onClick={() => setOpen(true)} />
+          <button type="button" data-testid={CLOSE} onClick={() => setOpen(false)} />
+        </>
+      );
+    }
+    const h = renderWithStudio(
+      <>
+        <ChordLane />
+        <TrackLane trackId={PIANO} />
+        <Keys />
+        <Toggle />
+      </>,
+      { stored: { [AUTOSAVE_KEY]: serializeSong(editorSong()) } },
+    );
+    stubLaneRect(screen.getByTestId("track-lane-" + PIANO), {
+      left: LANE_LEFT,
+      width: 1280,
+      height: 56,
+    });
+    return {
+      h,
+      setOpen: (open) =>
+        fireEvent.click(screen.getByTestId(open ? OPEN : CLOSE)),
+    };
+  }
+
+  it.each([
+    ["Delete", del],
+    ["Backspace", backspace],
+  ])("%s는 선택한 클립을 지우지 않고 기본 동작도 막지 않으며, 닫히면 다시 지운다", (_n, key) => {
+    const { h, setOpen } = renderWithModal();
+    selectClip(h, "clip-1");
+    setOpen(true);
+    expect(key().defaultPrevented).toBe(false);
+    expect(clipIds(h)).toEqual(["clip-1", "clip-2"]);
+    expect(h.studio().canUndo).toBe(false);
+
+    setOpen(false);
+    expect(key().defaultPrevented).toBe(true);
+    expect(clipIds(h)).toEqual(["clip-2"]);
+  });
+
+  it("Esc는 선택을 풀지 않고, 닫히면 다시 푼다", () => {
+    const { h, setOpen } = renderWithModal();
+    selectClip(h, "clip-1");
+    setOpen(true);
+    esc();
+    expect(selected(h)).toEqual({ trackId: PIANO, clipId: "clip-1" });
+
+    setOpen(false);
+    esc();
+    expect(selected(h)).toBeNull();
+  });
+
+  it("Space(재생)와 Ctrl+Z(되돌리기)는 그대로 동작한다", () => {
+    const { h, setOpen } = renderWithModal();
+    selectClip(h, "clip-1");
+    del();
+    expect(h.studio().canUndo).toBe(true);
+    setOpen(true);
+
+    expect(ctrlZ().defaultPrevented).toBe(true);
+    expect(clipIds(h)).toEqual(["clip-1", "clip-2"]);
+
+    expect(space().defaultPrevented).toBe(true);
+    expect(h.studio().pending).toBe(true);
+  });
+
+  it("언마운트로 모달이 사라져도 카운터가 풀려 다시 지운다", () => {
+    const { setOpen } = renderWithModal();
+    setOpen(true);
+    expect(hasOpenModal()).toBe(true);
+    cleanup();
+    expect(hasOpenModal()).toBe(false);
   });
 });
 
