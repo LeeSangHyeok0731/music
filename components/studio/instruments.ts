@@ -23,3 +23,11 @@ export const INSTRUMENT_TILE: Record<InstrumentId, string> = {
   bass: "bg-amber-500/25 border-amber-400/60",
   drums: "bg-rose-500/25 border-rose-400/60",
 };
+
+/** 피아노롤 세기 막대 색. Tailwind가 찾도록 클래스 전체를 적는다. */
+export const INSTRUMENT_BAR: Record<InstrumentId, string> = {
+  piano: "bg-indigo-400/80",
+  guitar: "bg-emerald-400/80",
+  bass: "bg-amber-400/80",
+  drums: "bg-rose-400/80",
+};

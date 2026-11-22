@@ -1,5 +1,7 @@
 "use client";
 
+import { useCallback, useState } from "react";
+
 import { songLengthTicks } from "@/lib/score/time";
 import { useStudio } from "@/state/useStudio";
 
@@ -11,6 +13,8 @@ import { Ruler } from "./Ruler";
 import { TopBar } from "./TopBar";
 import { TrackLane } from "./TrackLane";
 import { PX_PER_BAR } from "./geometry";
+import { PianoRoll } from "./pianoroll/PianoRoll";
+import { findClip } from "./useClipDrag";
 import { INSTRUMENT_DOT, INSTRUMENT_LABEL } from "./instruments";
 import {
   CHORD_LANE_HEIGHT,
@@ -32,6 +36,32 @@ import { useShortcuts } from "./useShortcuts";
 export function Studio() {
   const { song, playing, getEngine } = useStudio();
   useShortcuts();
+
+  // 피아노롤 모달. 곡과 별개인 UI 지역 상태다. `opener`는 닫을 때 포커스를 돌려받을 요소.
+  const [roll, setRoll] = useState<{
+    trackId: string;
+    clipId: string;
+    opener: HTMLElement;
+  } | null>(null);
+  const openRoll = useCallback(
+    (trackId: string, clipId: string, opener: HTMLElement) =>
+      setRoll({ trackId, clipId, opener }),
+    [],
+  );
+  const closeRoll = useCallback(() => setRoll(null), []);
+
+  // 파생 상태: 열린 클립이 사라지거나(되돌리기·삭제) 음 클립이 아니게 되면 모달을 닫는다.
+  // 재생이 시작돼도 열린 채로 둔다(편집만 막힌다).
+  const rollTrack = roll ? song.tracks.find((t) => t.id === roll.trackId) : undefined;
+  const rollClip = roll ? findClip(song, roll.trackId, roll.clipId) : undefined;
+  if (
+    roll &&
+    (rollTrack?.instrument === "drums" ||
+      rollClip === undefined ||
+      rollClip.body.type !== "notes")
+  ) {
+    setRoll(null);
+  }
 
   return (
     <div className="flex h-dvh flex-col bg-[#0b0c0f] text-zinc-200">
@@ -92,7 +122,11 @@ export function Studio() {
                 <Ruler bars={song.bars} />
                 <ChordLane />
                 {song.tracks.map((track) => (
-                  <TrackLane key={track.id} trackId={track.id} />
+                  <TrackLane
+                    key={track.id}
+                    trackId={track.id}
+                    onOpenRoll={openRoll}
+                  />
                 ))}
               </div>
               <Playhead
@@ -105,6 +139,14 @@ export function Studio() {
           </div>
         </div>
       </div>
+      {roll && (
+        <PianoRoll
+          trackId={roll.trackId}
+          clipId={roll.clipId}
+          opener={roll.opener}
+          onClose={closeRoll}
+        />
+      )}
     </div>
   );
 }

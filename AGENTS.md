@@ -10,19 +10,19 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 ## 현재 상태
 
-음악 비전공자의 아이디어 스케치 도구다. 곡은 "코드·패턴 클립"과 "음 클립"으로 만들고 브라우저에서 샘플 음원으로 재생한다. 하위 프로젝트 1(코어 모델 + 샘플 엔진)과 **2a(블록 조립 편집 화면)** 가 구현됐다. `public/samples/`에 CC0 샘플 팩(16비트 PCM 모노 22.05kHz WAV, 약 2.27MB)이 커밋돼 있고 `pnpm build:samples`로 고정 커밋의 원본에서 다시 만든다 — 출처·라이선스는 `public/samples/LICENSES.md`, 손으로 고치지 않는다. 기타는 일렉트릭 직결 녹음이다(CC0 어쿠스틱 기타를 찾지 못했다).
+음악 비전공자의 아이디어 스케치 도구다. 곡은 "코드·패턴 클립"과 "음 클립"으로 만들고 브라우저에서 샘플 음원으로 재생한다. 하위 프로젝트 1(코어 모델 + 샘플 엔진), **2a(블록 조립 편집 화면)**, **2b-1(화음 악기 피아노롤)** 이 구현됐다. `public/samples/`에 CC0 샘플 팩(16비트 PCM 모노 22.05kHz WAV, 약 2.27MB)이 커밋돼 있고 `pnpm build:samples`로 고정 커밋의 원본에서 다시 만든다 — 출처·라이선스는 `public/samples/LICENSES.md`, 손으로 고치지 않는다. 기타는 일렉트릭 직결 녹음이다(CC0 어쿠스틱 기타를 찾지 못했다).
 
-**검증되지 않은 것: 아무도 직접 조립해 들어 보지 않았다.** 코드 변경이 세 악기에 따라오는 음높이, 마디 중간 코드 변경, 패턴·템포 변경 소리는 모두 미확인이다. 통제자가 Chrome에서 레이아웃과 조작(드래그·팝오버·삭제·되돌리기·Space 재생/정지·자동 저장 복원)만 스모크 점검했고 소리는 듣지 못했다. Safari는 지원 대상이 아니다. 남은 것과 듣기 체크리스트는 `docs/known-gaps.md`.
+**검증되지 않은 것: 아무도 직접 조립해 들어 보지 않았다.** 코드 변경이 세 악기에 따라오는 음높이, 마디 중간 코드 변경, 패턴·템포 변경 소리는 모두 미확인이다. 통제자가 Chrome에서 레이아웃과 조작(드래그·팝오버·삭제·되돌리기·Space 재생/정지·자동 저장 복원)만 스모크 점검했고 소리는 듣지 못했다. 피아노롤(굽기 직후 원래 패턴과 같은 소리인지, 음 편집이 소리에 반영되는지 포함)도 들어 보지 않았다. Safari는 지원 대상이 아니다. 남은 것과 듣기 체크리스트는 `docs/known-gaps.md`.
 
-설계는 `docs/superpowers/specs/`에 있다: 모델·엔진은 `2026-11-20-core-model-sample-engine-design.md`(§3 모델은 v3로 대체됨), 편집 화면과 v3 모델은 `2026-11-21-arrangement-editor-design.md`. 그 이전 날짜의 문서는 철거된 옛 설계다.
+설계는 `docs/superpowers/specs/`에 있다: 모델·엔진은 `2026-11-20-core-model-sample-engine-design.md`(§3 모델은 v3로 대체됨), 편집 화면과 v3 모델은 `2026-11-21-arrangement-editor-design.md`, 피아노롤은 `2026-11-21-piano-roll-design.md`. 그 이전 날짜의 문서는 철거된 옛 설계다.
 
 **지금 있는 것:**
-- `lib/score/` — 곡 모델 v3(`model.ts`), 틱·마디 변환(`time.ts`), 코드 음정(`chords.ts`), 패턴 카탈로그(`patterns.ts`), 코드 진행 조회(`progression.ts`: `chordAt`), 펼치기·베이크(`expand.ts`: `expandSong`/`bakeClip`), 불변식 검증(`validate.ts`), zod 스키마와 복구(`song-schema.ts`: `parseSong`), 데모 곡(`demo-song.ts`), **편집 규칙(`edit.ts`)**, 실행취소 순수 규칙(`history.ts`, 50칸), 자동 저장 직렬화(`autosave.ts`), 마디 축소 판정(`bars.ts`), 패턴 표시 이름(`pattern-labels.ts`)
+- `lib/score/` — 곡 모델 v3(`model.ts`), 틱·마디 변환(`time.ts`), 코드 음정(`chords.ts`), 패턴 카탈로그(`patterns.ts`), 코드 진행 조회(`progression.ts`: `chordAt`), 펼치기·베이크(`expand.ts`: `expandSong`/`bakeClip`), 불변식 검증(`validate.ts`), zod 스키마와 복구(`song-schema.ts`: `parseSong`), 데모 곡(`demo-song.ts`), **편집 규칙(`edit.ts`)**, **음 클립 편집 규칙(`notes.ts`: 굽기, 음 추가·이동·길이·삭제·세기, 박스 선택)**, 실행취소 순수 규칙(`history.ts`, 50칸), 자동 저장 직렬화(`autosave.ts`), 마디 축소 판정(`bars.ts`), 패턴 표시 이름(`pattern-labels.ts`)
 - `lib/audio/` — AudioContext, look-ahead 스케줄러, 보이스 풀, 메트로놈, `SampleBank`(`samples/`), 샘플 악기(`instruments/sampler.ts`), `Engine`
 - `state/` — `StudioProvider`(Engine 하나·곡 히스토리·재생 상태 기계·자동 저장을 소유), `useStudio()`
-- `components/studio/` — `/`의 편집 화면: 코드 진행 레인 + 고정 4트랙(피아노·기타·베이스·드럼, 추가·삭제 없음), 패턴 클립 추가·이동·길이·삭제, 코드·패턴 팝오버, 마디 1~64(UI 한도) 추가·삭제, 되돌리기(다시실행 없음), 단축키(Space — 샘플 받는 대기 중에도 정지, Ctrl/Cmd+Z, Delete/Backspace, Esc 겹겹이 닫기). 곡은 `localStorage` 키 `bandline:song:v3`에 자동 저장·복원한다
+- `components/studio/` — `/`의 편집 화면: 코드 진행 레인 + 고정 4트랙(피아노·기타·베이스·드럼, 추가·삭제 없음), 패턴 클립 추가·이동·길이·삭제, 코드·패턴 팝오버, 마디 1~64(UI 한도) 추가·삭제, 되돌리기(다시실행 없음), 단축키(Space — 샘플 받는 대기 중에도 정지, Ctrl/Cmd+Z, Delete/Backspace, Esc 겹겹이 닫기). **음 클립 편집 = 모달 피아노롤**(`components/studio/pianoroll/`): 화음 악기(피아노·기타·베이스) 패턴 클립을 팝오버의 "음으로 바꾸기"(굽기 — 그 시점의 코드 진행으로 펼친 음을 굳히는 한 방향 변환, 이후 진행을 바꿔도 따라가지 않는다)나 "빈 음 클립으로"로 음 클립으로 만들거나 빈 칸 Shift+클릭으로 빈 음 클립을 만들고, 음 클립의 "음 편집" 버튼·더블클릭·Enter로 연다. 모달 안에서 음 추가·선택(Shift 토글·박스)·이동·길이·삭제, 세기 레인, 키보드 편집, 격자 단위(1/4·1/8·1/16)를 쓰고 곡 전체 재생(Space)·되돌리기도 된다. 드럼 트랙에는 음 편집이 없다. 곡은 `localStorage` 키 `bandline:song:v3`에 자동 저장·복원한다
 
-**규칙의 단일 출처:** 편집 규칙(스냅 960틱·클램프·겹침 방지·최소 길이)은 `lib/score/edit.ts`의 순수 함수에만 둔다. 같은 참조를 돌려주면 no-op이고, 결과는 항상 `validateSong`을 통과한다. 훅·컴포넌트에 규칙을 두지 않는다. **편집은 정지 중에만** 된다(엔진 `setSong`이 재생 중·재생 대기 중 `false`이므로).
+**규칙의 단일 출처:** 편집 규칙(스냅 960틱·클램프·겹침 방지·최소 길이)은 `lib/score/edit.ts`의 순수 함수에만 둔다. **음 클립의 편집 규칙(격자 스냅·클립 경계 클램프·같은 음높이 겹침 방지·음높이 범위·세기 하한, 굽기)은 `lib/score/notes.ts`가 단일 출처**이고 컴포넌트·훅에 두지 않는다(피아노롤 훅은 좌표 → 격자 변환, 미리보기, 선택만 한다). 같은 참조를 돌려주면 no-op이고, 결과는 항상 `validateSong`을 통과한다. 훅·컴포넌트에 규칙을 두지 않는다. **편집은 정지 중에만** 된다(엔진 `setSong`이 재생 중·재생 대기 중 `false`이므로).
 
 **곡 모델의 규칙** (상세는 2026-11-21 spec 3절)
 - **곡 모델은 v3다**(`SONG_VERSION = 3`, v2는 거부하고 마이그레이션하지 않는다). 코드 진행(`progression`)은 곡이 소유하고, 클립 본문은 `pattern`(패턴 id만) 또는 `notes`다. 진행은 곡 전체를 빈틈·겹침 없이 덮는다(`validateSong`이 검사). `expandSong(song)`은 시그니처 그대로이고, 각 스텝의 코드를 그 스텝의 절대 시각으로 진행에서 찾는다 — 마디 중간에서 코드가 바뀌면 그 시각의 스텝부터 새 코드다.
@@ -37,7 +37,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 - 타입이 맞는 `Song` 기준으로, `setSong`이 던지는 것은 패턴이 잘못된 곡(모르는 패턴 id, 트랙 악기와 맞지 않는 패턴) 또는 진행이 곡을 덮지 않거나 코드가 잘못된 곡(`chordAt`의 `RangeError`, `chordPitch` 오류)뿐이고 그때 엔진은 그대로다. 겹침·`bars`·박자표·정수 틱 같은 나머지 불변식은 검사하지 않는다. 파일·링크처럼 믿을 수 없는 입력은 반드시 `parseSong`을 거친다(모르는 `quality`·악기·패턴·버전을 거부한다) — `validateSong`은 이미 타입이 맞는 곡의 구조 불변식(진행이 곡을 덮는지, 코드 값 `invalid-chord` 포함)만 보며 `parseSong`의 대체가 아니다.
 - `play()`는 `PlayResult`를 돌려준다. 곡이 쓰는 악기의 샘플 준비(다운로드·디코드)가 끝나야 시작하고, 준비에 실패한 악기가 있으면 `not-ready`다. 샘플은 AudioContext 없이 `prefetch`로 받고(생성자·`setSong`이 부른다) 디코드는 컨텍스트가 생긴 `play()`에서 한다. `play()`의 await는 둘이고 `ensureRunning`이 먼저(사용자 제스처 안)이며 그다음이 `bank.ensureReady`다 — 각각 뒤에서 세션 번호를 다시 확인한다.
 
-아직 없는 것: **편집 UI의 나머지(하위 프로젝트 2b) — 음 단위 편집·피아노롤, 클립 복사/붙여넣기, 다시실행, 트랙 추가·삭제, 곡 파일 열기·저장 UI**, 루프·시크·줌, **링크 공유·서명 검증·모바일 재생 뷰(3), 오디오 내보내기(4), 악보 PDF 가져오기(5)**. (`pnpm gen:dev-samples`의 합성 톤은 파이프라인 점검용이고 `public/samples-dev/`(gitignore)에 쓴다.)
+아직 없는 것: **편집 UI의 나머지(하위 프로젝트 2b) — 드럼 그리드(2b-2), 음 미리듣기, 반복 재생, 복사/붙여넣기(클립·음), 다시실행, 줌, 트랙 추가·삭제, 곡 파일 열기·저장 UI**, 시크, **링크 공유·서명 검증·모바일 재생 뷰(3), 오디오 내보내기(4), 악보 PDF 가져오기(5)**. (`pnpm gen:dev-samples`의 합성 톤은 파이프라인 점검용이고 `public/samples-dev/`(gitignore)에 쓴다.)
 
 ## 절대 규칙
 

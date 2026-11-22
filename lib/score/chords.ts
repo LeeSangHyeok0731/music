@@ -64,3 +64,16 @@ export function chordLabel(chord: Chord): string {
   }
   return ROOT_NAMES[chord.root] + QUALITY_SUFFIX[chord.quality];
 }
+
+/**
+ * 코드 구성음의 피치 클래스(0..11, 오름차순, 중복 없음). `chordPitch`와 같은 간격 표에서
+ * 만든다 — 피아노롤이 코드 구성음 행을 칠하는 데 쓴다. 근음이 0..11의 정수가 아니면
+ * RangeError(`chordLabel`과 같다).
+ */
+export function chordPitchClasses(chord: Chord): number[] {
+  if (!Number.isInteger(chord.root) || chord.root < 0 || chord.root > 11) {
+    throw new RangeError(`root는 0..11의 정수여야 합니다: ${chord.root}`);
+  }
+  const classes = new Set(INTERVALS[chord.quality].map((i) => (chord.root + i) % 12));
+  return [...classes].sort((a, b) => a - b);
+}

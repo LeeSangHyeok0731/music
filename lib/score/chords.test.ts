@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { chordLabel, chordPitch } from "@/lib/score/chords";
+import { chordLabel, chordPitch, chordPitchClasses } from "@/lib/score/chords";
 import { CHORD_QUALITIES, type Chord } from "@/lib/score/model";
 
 const C_MAJ: Chord = { root: 0, quality: "maj" };
@@ -107,6 +107,39 @@ describe("chordLabel", () => {
     "근음이 0..11의 정수가 아니면(%s) RangeError",
     (root) => {
       expect(() => chordLabel({ root, quality: "maj" })).toThrow(RangeError);
+    },
+  );
+});
+
+describe("chordPitchClasses", () => {
+  it("예시 코드의 피치 클래스(오름차순, 0..11)", () => {
+    expect(chordPitchClasses(C_MAJ)).toEqual([0, 4, 7]);
+    expect(chordPitchClasses(A_MIN)).toEqual([0, 4, 9]);
+    expect(chordPitchClasses(G_DOM7)).toEqual([2, 5, 7, 11]);
+    expect(chordPitchClasses({ root: 0, quality: "maj7" })).toEqual([0, 4, 7, 11]);
+    expect(chordPitchClasses({ root: 2, quality: "min7" })).toEqual([0, 2, 5, 9]);
+  });
+
+  it("chordPitch와 같은 간격 표를 쓴다: 모든 근음·종류에서 옥타브 환산이 일치한다", () => {
+    for (const quality of CHORD_QUALITIES) {
+      for (let root = 0; root < 12; root++) {
+        const chord = { root, quality };
+        const fromPitch = new Set(
+          [0, 1, 2, 3].map((d) => chordPitch(chord, d, 4) % 12),
+        );
+        expect(chordPitchClasses(chord)).toEqual(
+          [...fromPitch].sort((a, b) => a - b),
+        );
+      }
+    }
+  });
+
+  it.each([-1, 12, 1.5, Number.NaN, Number.POSITIVE_INFINITY])(
+    "근음이 0..11의 정수가 아니면(%s) RangeError",
+    (root) => {
+      expect(() => chordPitchClasses({ root, quality: "maj" })).toThrow(
+        RangeError,
+      );
     },
   );
 });

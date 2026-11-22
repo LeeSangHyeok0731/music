@@ -23,9 +23,10 @@ paths:
 
 ```text
 app/                    Next.js App Router 엔트리포인트 (`/` = 편집 화면: `StudioProvider`로 감싼 `Studio`)
-lib/score/              곡 데이터 모델 v3 — Song/Track/Clip/Note + 곡이 소유하는 코드 진행(progression), 코드·패턴, 펼치기, 검증, 스키마, 데모 곡, 실행취소 규칙(history.ts), 편집 규칙(edit.ts — 규칙의 단일 출처), 자동 저장 직렬화(autosave.ts), 진행 조회(progression.ts), 마디 축소 판정(bars.ts), 패턴 표시 이름(pattern-labels.ts). 순수 TS. Web Audio도 React도 import하지 않는다
+lib/score/              곡 데이터 모델 v3 — Song/Track/Clip/Note + 곡이 소유하는 코드 진행(progression), 코드·패턴, 펼치기, 검증, 스키마, 데모 곡, 실행취소 규칙(history.ts), 편집 규칙(edit.ts — 규칙의 단일 출처), 음 클립 편집 규칙(notes.ts — 굽기·음 추가/이동/길이/삭제/세기·박스 선택, 음 클립 규칙의 단일 출처), 자동 저장 직렬화(autosave.ts), 진행 조회(progression.ts), 마디 축소 판정(bars.ts), 패턴 표시 이름(pattern-labels.ts). 순수 TS. Web Audio도 React도 import하지 않는다
 lib/audio/              오디오 엔진 — AudioContext, look-ahead 스케줄러, 보이스 풀, 메트로놈, 샘플 뱅크(samples/), 샘플 악기(instruments/). 순수 TS. React를 import하지 않는다
-components/studio/      편집 화면 UI — Studio, TopBar, 코드 레인(ChordLane), 트랙 레인(TrackLane/ClipBlock), 팝오버, Playhead, 드래그 훅(useClipDrag/useBoundaryDrag), 단축키(useShortcuts), 좌표 순수 함수(geometry.ts), 레이아웃 상수(layout.ts), 테스트 헬퍼(testing/)
+components/studio/      편집 화면 UI — Studio, TopBar, 코드 레인(ChordLane), 트랙 레인(TrackLane/ClipBlock), 팝오버, Playhead, 드래그 훅(useClipDrag/useBoundaryDrag), 단축키(useShortcuts), 좌표 순수 함수(geometry.ts), 레이아웃 상수(layout.ts), 모달 열림 카운터(modal.ts), 테스트 헬퍼(testing/)
+components/studio/pianoroll/  피아노롤 모달(화음 악기 음 클립 편집) — PianoRoll(모달 껍데기·포커스·Esc), NoteGrid·NoteBlock·KeyColumn·SelectionBox, VelocityLane(세기 레인), RollHeader, 제스처 훅(useNoteGestures)·키보드 훅(useNoteKeys)·포커스 가두기(useFocusTrap), 좌표·격자 배경 순수 함수(geometry.ts)
 components/ui/          (아직 없음) 공용 컨트롤
 state/                  StudioProvider — Engine 하나, 곡 히스토리, 재생 상태 기계, 자동 저장을 소유. useStudio()가 StudioApi를 준다. 테스트용 가짜 의존성은 state/testing/fake-deps.ts
 scripts/                샘플 팩 빌드(build-sample-pack.mjs, sample-pack.config.mjs, sample-pack/), 개발용 합성 톤(gen-dev-samples.mjs → public/samples-dev/, gitignore)
@@ -33,6 +34,8 @@ public/samples/         CC0 샘플 팩(커밋됨). `pnpm build:samples` 출력�
 ```
 
 **편집 규칙은 `lib/score/edit.ts`에만 둔다.** 스냅·클램프·겹침 방지·최소 길이 같은 규칙을 훅·컴포넌트에 두지 않는다. 편집 함수는 새 `Song`을 돌려주고 바뀐 게 없으면 같은 참조를 돌려주며(실행취소가 빈 칸을 쌓지 않는다), 결과는 항상 `validateSong`을 통과한다. UI는 `useStudio().edit.*`로만 곡을 바꾸고, 드래그는 미리보기만 그리다가 놓을 때 한 번 커밋한다.
+
+**음 클립의 편집 규칙은 `lib/score/notes.ts`에만 둔다.** 격자 스냅·클립 경계 클램프·같은 음높이 겹침 방지·음높이 범위·세기 하한·굽기를 피아노롤 훅·컴포넌트에 두지 않는다. `plan*` 함수가 `{ song, keys }`를 돌려주므로 미리보기·선택 갱신도 같은 계산을 쓴다(`components/studio/pianoroll/`의 훅은 포인터 → 격자 좌표 변환, 5px 임계값, 미리보기, 선택만 한다). UI는 `useStudio().edit.notes.*`(음 편집)와 `edit.bakeClipToNotes`·`emptyNotesClip`·`addEmptyNotesClip`(클립 본문 바꾸기)로만 곡을 바꾼다. 음 선택(`NoteKey` 목록)과 격자 단위는 모달의 지역 상태이고 곡·실행취소에 들어가지 않는다.
 
 `src/`, feature/entity 레이어, FSD는 두지 않는다. 이 규모에 맞지 않는다.
 

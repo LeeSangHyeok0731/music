@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { AUTOSAVE_KEY, loadSong, serializeSong } from "@/lib/score/autosave";
 import { buildDemoSong, DEMO_BARS } from "@/lib/score/demo-song";
 import { setBars } from "@/lib/score/edit";
+import { addNote, emptyNotesClip } from "@/lib/score/notes";
 import type { Song } from "@/lib/score/model";
 import { songLengthTicks } from "@/lib/score/time";
 import { StudioProvider } from "@/state/StudioProvider";
@@ -104,14 +105,18 @@ describe("1. 초기 곡", () => {
 });
 
 describe("2. 편집과 실행취소", () => {
-  it("편집 액션은 lib/score/edit.ts의 편집 집합과 정확히 같다", () => {
+  it("편집 액션은 lib/score/edit.ts의 편집 집합에 굽기·음 편집만 더한 것과 정확히 같다", () => {
     const { api } = setup();
     expect(Object.keys(api().edit).sort()).toEqual(
       [
         "addClip",
+        "addEmptyNotesClip",
+        "bakeClipToNotes",
+        "emptyNotesClip",
         "mergeSegments",
         "moveBoundary",
         "moveClip",
+        "notes",
         "removeClip",
         "resizeClip",
         "setBars",
@@ -121,6 +126,35 @@ describe("2. 편집과 실행취소", () => {
         "splitSegment",
       ],
     );
+  });
+
+  it("음 편집 액션 집합은 lib/score/notes.ts의 편집 함수와 같다", () => {
+    const { api } = setup();
+    expect(Object.keys(api().edit.notes).sort()).toEqual([
+      "addNote",
+      "moveNotes",
+      "removeNotes",
+      "resizeNotes",
+      "setVelocities",
+    ]);
+    expect(typeof api().edit.bakeClipToNotes).toBe("function");
+    expect(typeof api().edit.emptyNotesClip).toBe("function");
+    expect(typeof api().edit.addEmptyNotesClip).toBe("function");
+  });
+
+  it("addEmptyNotesClip은 빈 음 클립을 만들고 되돌리기 한 번으로 클립째 사라진다", () => {
+    const { api } = setup();
+    const piano = api().song.tracks.find((t) => t.instrument === "piano")!;
+    const last = piano.clips.at(-1)!;
+    act(() => api().edit.removeClip(piano.id, last.id)); // 빈 자리를 만든다
+    const emptied = api().song;
+    act(() => api().edit.addEmptyNotesClip(piano.id, last.start));
+    const added = api()
+      .song.tracks.find((t) => t.id === piano.id)!
+      .clips.find((c) => c.start === last.start);
+    expect(added?.body).toEqual({ type: "notes", notes: [] });
+    act(() => api().undo()); // 한 번이면 패턴 클립이 아니라 클립 자체가 사라진다
+    expect(api().song).toBe(emptied);
   });
 
   it("편집이 곡을 바꾸고 canUndo가 참이 되며 undo가 되돌린다", () => {
@@ -874,5 +908,168 @@ describe("11. 마디를 줄일 때 안내", () => {
     });
     act(() => api().edit.setBars(1));
     expect(api().message).toBeNull();
+  });
+});
+
+describe("12. 음 편집·굽기", () => {
+  const BAKED =
+    "음으로 바꿨습니다 — 코드 진행을 바꿔도 이 클립은 따라가지 않습니다. 되돌리기로 복구할 수 있습니다";
+  const PIANO = "track-piano";
+  const DRUMS = "track-drums";
+  const NOTES_CLIP = "piano-0"; // 음 클립(0:60 한 음이 있다)
+  const PATTERN_CLIP = "piano-1"; // 패턴 클립
+
+  /** 데모의 piano-0을 음 하나(0틱, 60)가 든 음 클립으로 바꾼 곡. piano-1은 패턴 클립이다. */
+  function notesSong(): Song {
+    return addNote(
+      emptyNotesClip(buildDemoSong(), PIANO, NOTES_CLIP),
+      PIANO,
+      NOTES_CLIP,
+      { start: 0, pitch: 60 },
+      "1/4",
+    );
+  }
+  function setupNotes(options: FakeDepsOptions = {}) {
+    return setup({ ...options, stored: { [AUTOSAVE_KEY]: serializeSong(notesSong()) } });
+  }
+  function firstNotes(song: Song) {
+    const clip = song.tracks[0].clips[0];
+    if (clip.body.type !== "notes") throw new Error("notes 클립이 아닙니다");
+    return clip.body.notes;
+  }
+
+  type Run = (api: ReturnType<typeof useStudio>) => void;
+  const changing: Array<[string, Run]> = [
+    ["addNote", (a) => a.edit.notes.addNote(PIANO, NOTES_CLIP, { start: 960, pitch: 64 }, "1/4")],
+    ["moveNotes", (a) => a.edit.notes.moveNotes(PIANO, NOTES_CLIP, ["0:60"], 480, 0, "1/4")],
+    ["resizeNotes", (a) => a.edit.notes.resizeNotes(PIANO, NOTES_CLIP, ["0:60"], 480, "1/4")],
+    ["removeNotes", (a) => a.edit.notes.removeNotes(PIANO, NOTES_CLIP, ["0:60"])],
+    ["setVelocities", (a) => a.edit.notes.setVelocities(PIANO, NOTES_CLIP, ["0:60"], 0.5)],
+    ["emptyNotesClip", (a) => a.edit.emptyNotesClip(PIANO, PATTERN_CLIP)],
+    ["bakeClipToNotes", (a) => a.edit.bakeClipToNotes(PIANO, PATTERN_CLIP)],
+  ];
+  const noops: Array<[string, Run]> = [
+    ["addNote(이미 있는 자리)", (a) => a.edit.notes.addNote(PIANO, NOTES_CLIP, { start: 0, pitch: 60 }, "1/4")],
+    ["moveNotes(0, 0)", (a) => a.edit.notes.moveNotes(PIANO, NOTES_CLIP, ["0:60"], 0, 0, "1/4")],
+    ["resizeNotes(0)", (a) => a.edit.notes.resizeNotes(PIANO, NOTES_CLIP, ["0:60"], 0, "1/4")],
+    ["removeNotes(키 없음)", (a) => a.edit.notes.removeNotes(PIANO, NOTES_CLIP, [])],
+    ["setVelocities(같은 값)", (a) => a.edit.notes.setVelocities(PIANO, NOTES_CLIP, ["0:60"], 0.8)],
+    ["emptyNotesClip(음 클립)", (a) => a.edit.emptyNotesClip(PIANO, NOTES_CLIP)],
+    ["bakeClipToNotes(음 클립)", (a) => a.edit.bakeClipToNotes(PIANO, NOTES_CLIP)],
+  ];
+  const throwing: Array<[string, Run]> = [
+    ["addNote(없는 클립)", (a) => a.edit.notes.addNote(PIANO, "nope", { start: 0, pitch: 60 }, "1/4")],
+    ["moveNotes(없는 트랙)", (a) => a.edit.notes.moveNotes("nope", NOTES_CLIP, ["0:60"], 480, 0, "1/4")],
+    ["resizeNotes(패턴 클립)", (a) => a.edit.notes.resizeNotes(PIANO, PATTERN_CLIP, ["0:60"], 480, "1/4")],
+    ["removeNotes(드럼 트랙)", (a) => a.edit.notes.removeNotes(DRUMS, "drums-0", [])],
+    ["setVelocities(없는 클립)", (a) => a.edit.notes.setVelocities(PIANO, "nope", ["0:60"], 0.5)],
+    ["emptyNotesClip(없는 클립)", (a) => a.edit.emptyNotesClip(PIANO, "nope")],
+    ["bakeClipToNotes(없는 클립)", (a) => a.edit.bakeClipToNotes(PIANO, "nope")],
+  ];
+
+  it.each(changing)("%s: 곡을 바꾸고 canUndo가 참이며 undo가 되돌린다", (_n, run) => {
+    const { api } = setupNotes();
+    const before = api().song;
+    act(() => run(api()));
+    expect(api().song).not.toBe(before);
+    expect(api().canUndo).toBe(true);
+    act(() => api().undo());
+    expect(api().song).toBe(before);
+    expect(api().canUndo).toBe(false);
+  });
+
+  it("addNote·removeNotes는 실제로 음을 더하고 뺀다", () => {
+    const { api } = setupNotes();
+    act(() => api().edit.notes.addNote(PIANO, NOTES_CLIP, { start: 960, pitch: 64 }, "1/4"));
+    expect(firstNotes(api().song).map((x) => `${x.start}:${x.pitch}`)).toEqual(["0:60", "960:64"]);
+    act(() => api().edit.notes.removeNotes(PIANO, NOTES_CLIP, ["0:60"]));
+    expect(firstNotes(api().song).map((x) => `${x.start}:${x.pitch}`)).toEqual(["960:64"]);
+  });
+
+  it.each(noops)("%s: 기록·저장·안내가 없다", (_n, run) => {
+    installFakeTimers();
+    const { api, fake } = setupNotes();
+    const before = api().song;
+    act(() => run(api()));
+    act(() => vi.advanceTimersByTime(1000));
+    expect(api().song).toBe(before);
+    expect(api().canUndo).toBe(false);
+    expect(fake.storage!.setItem).not.toHaveBeenCalled();
+    expect(api().message).toBeNull();
+  });
+
+  it.each(throwing)("%s: 곡을 그대로 두고 편집 실패를 안내한다", (_n, run) => {
+    installFakeTimers();
+    const { api, fake } = setupNotes();
+    const before = api().song;
+    act(() => run(api()));
+    act(() => vi.advanceTimersByTime(1000));
+    expect(api().song).toBe(before);
+    expect(api().canUndo).toBe(false);
+    expect(api().message).toBe(EDIT_FAILED);
+    expect(fake.storage!.setItem).not.toHaveBeenCalled();
+  });
+
+  it.each(changing)("%s: 재생 대기 중(편집 불가)에는 무시한다", (_n, run) => {
+    const { api } = setupNotes({ playMode: "manual" });
+    const before = api().song;
+    act(() => {
+      void api().play();
+    });
+    expect(api().editable).toBe(false);
+    act(() => run(api()));
+    expect(api().song).toBe(before);
+    expect(api().canUndo).toBe(false);
+    expect(api().message).toBeNull();
+  });
+
+  it.each(changing)("%s: 재생 중(편집 불가)에는 무시한다", async (_n, run) => {
+    const { api } = setupNotes({ playMode: { status: "playing" } });
+    const before = api().song;
+    await act(async () => {
+      await api().play();
+    });
+    expect(api().playing).toBe(true);
+    act(() => run(api()));
+    expect(api().song).toBe(before);
+    expect(api().canUndo).toBe(false);
+    expect(api().message).toBeNull();
+  });
+
+  describe("굽기 안내", () => {
+    it("굽기가 곡을 바꾸면 정확한 문구로 알린다", () => {
+      const { api } = setupNotes();
+      act(() => api().edit.bakeClipToNotes(PIANO, PATTERN_CLIP));
+      expect(api().message).toBe(BAKED);
+    });
+
+    it("emptyNotesClip에는 안내가 없다", () => {
+      const { api } = setupNotes();
+      act(() => api().edit.emptyNotesClip(PIANO, PATTERN_CLIP));
+      expect(api().message).toBeNull();
+    });
+
+    it("음 편집(addNote 등)에도 안내가 없다", () => {
+      const { api } = setupNotes();
+      act(() => api().edit.notes.addNote(PIANO, NOTES_CLIP, { start: 960, pitch: 64 }, "1/4"));
+      expect(api().message).toBeNull();
+    });
+
+    it("이미 notes인 클립 굽기(no-op)와 던지는 굽기에는 굽기 안내가 없다", () => {
+      const { api } = setupNotes();
+      act(() => api().edit.bakeClipToNotes(PIANO, NOTES_CLIP));
+      expect(api().message).toBeNull();
+      act(() => api().edit.bakeClipToNotes(PIANO, "nope"));
+      expect(api().message).toBe(EDIT_FAILED);
+    });
+
+    it("되돌려도 안내는 남는다 — 마디 축소 안내와 같은 동작(사용자가 닫는다)", () => {
+      const { api } = setupNotes();
+      act(() => api().edit.bakeClipToNotes(PIANO, PATTERN_CLIP));
+      act(() => api().undo());
+      expect(api().message).toBe(BAKED);
+      act(() => api().dismissMessage());
+      expect(api().message).toBeNull();
+    });
   });
 });

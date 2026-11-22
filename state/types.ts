@@ -1,6 +1,7 @@
 import type { Engine } from "@/lib/audio/engine";
 import type { SampleStatus } from "@/lib/audio/samples/bank";
 import type * as Edit from "@/lib/score/edit";
+import type * as Notes from "@/lib/score/notes";
 import type { InstrumentId, Song } from "@/lib/score/model";
 
 /** Provider가 엔진에서 쓰는 부분. 테스트가 가짜를 끼운다(`state/testing/fake-deps.ts`). */
@@ -48,7 +49,27 @@ type WithoutSong<F> = F extends (song: Song, ...rest: infer A) => Song
   ? (...args: A) => void
   : never;
 
-export type StudioEdits = { [K in EditName]: WithoutSong<(typeof Edit)[K]> };
+/** `lib/score/notes.ts`에서 Provider가 `edit.notes`로 노출하는 음 편집 함수들. */
+export type NoteEditName =
+  | "addNote"
+  | "moveNotes"
+  | "resizeNotes"
+  | "removeNotes"
+  | "setVelocities";
+
+export type StudioNoteEdits = {
+  [K in NoteEditName]: WithoutSong<(typeof Notes)[K]>;
+};
+
+export type StudioEdits = { [K in EditName]: WithoutSong<(typeof Edit)[K]> } & {
+  /** `pattern` 클립을 지금 코드 진행으로 펼친 `notes` 클립으로 바꾼다. 곡이 바뀌면 안내를 띄운다. */
+  bakeClipToNotes: WithoutSong<typeof Notes.bakeClipToNotes>;
+  /** `pattern` 클립을 같은 자리의 빈 `notes` 클립으로 바꾼다. */
+  emptyNotesClip: WithoutSong<typeof Notes.emptyNotesClip>;
+  /** 빈 칸에 빈 `notes` 클립을 만든다(`addClip`과 같은 자리·길이). 실행취소 한 칸. 드럼 트랙은 던진다. */
+  addEmptyNotesClip: WithoutSong<typeof Notes.addEmptyNotesClip>;
+  notes: StudioNoteEdits;
+};
 
 export type StudioApi = {
   song: Song;

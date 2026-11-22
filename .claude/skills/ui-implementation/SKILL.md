@@ -33,9 +33,9 @@ description: 'Implement Bandline editing UI: the piano roll, timeline, track hea
 노트가 수천 개까지 갈 수 있는 화면이다. 일반 폼 UI와 규칙이 다르다.
 
 - **플레이헤드는 노트와 분리된 레이어.** 움직일 때 노트가 리렌더되면 안 된다. `rAF`에서 ref로 `transform: translateX()`만 직접 쓴다 — `useState`를 거치지 않는다.
-- 화면 밖 노트는 그리지 않는다(가상화).
+- 화면 밖 노트를 그리지 않는 가상화는 아직 없다(수백 음 클립의 렌더 비용은 측정하지 않았다 — `docs/known-gaps.md` 12절).
 - 노트 데이터에 픽셀 값을 저장하지 않는다. 음악적 시간을 렌더 직전에 `pixelsPerBeat × zoom`으로 환산한다.
-- 렌더 방식(DOM vs `<canvas>`)은 미정. DOM으로 시작하고, 노트 수가 늘어 프레임이 떨어지면 canvas 전환을 제안한다.
+- 노트는 DOM 요소로 그린다(`components/studio/pianoroll/`). 격자 선은 요소가 아니라 CSS 배경(`gridBackground`)이다. 노트 수가 늘어 프레임이 떨어지면 canvas 전환을 제안한다.
 - 줌·스크롤은 React 상태로 둬도 되지만, 스크롤 중 전체 리렌더가 나지 않는지 확인한다.
 
 ## Interaction Rules

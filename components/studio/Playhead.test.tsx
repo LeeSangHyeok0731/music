@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Playhead } from "./Playhead";
 import { tickToX } from "./geometry";
+import { rollTickToX } from "./pianoroll/geometry";
 
 const LENGTH = 1920 * 8;
 
@@ -144,5 +145,79 @@ describe("Playhead", () => {
     const el = container.querySelector("[data-testid='playhead']")!;
     expect(el.className).toContain("bg-red-500");
     expect(el.className).toContain("pointer-events-none");
+  });
+});
+
+describe("Playhead toX / offsetTick 주입 (피아노롤)", () => {
+  // 클립이 곡 960~2880틱 구간이다(길이 1920).
+  const CLIP_START = 960;
+  const CLIP_LENGTH = 1920;
+  const roll = (tick: number) =>
+    render(
+      <Playhead
+        engine={engineAt(tick)}
+        playing
+        lengthTicks={CLIP_LENGTH}
+        offsetTick={CLIP_START}
+        toX={rollTickToX}
+      />,
+    );
+
+  it("클립 구간 안의 곡 틱을 클립 기준 x(px)로 그린다 (곡 1440 → 클립 480 → 96px)", () => {
+    const { container } = roll(1440);
+    runFrame();
+    expect(transformOf(container)).toBe("translateX(96px)");
+  });
+
+  it("구간 시작 앞의 틱은 0으로 클램프한다", () => {
+    const { container } = roll(100);
+    runFrame();
+    expect(transformOf(container)).toBe("translateX(0px)");
+  });
+
+  it("구간 끝 뒤의 틱은 마지막 틱(길이 - 1)으로 클램프한다", () => {
+    const { container } = roll(99999);
+    runFrame();
+    expect(transformOf(container)).toBe(
+      `translateX(${rollTickToX(CLIP_LENGTH - 1)}px)`,
+    );
+  });
+
+  it.each([NaN, Infinity, -Infinity])("비유한 틱 %s는 구간 시작(0)이다", (tick) => {
+    const { container } = roll(tick);
+    runFrame();
+    expect(transformOf(container)).toBe("translateX(0px)");
+  });
+
+  it("정지하면 0px로 돌아가고 rAF를 요청하지 않는다", () => {
+    const { container, rerender } = render(
+      <Playhead
+        engine={engineAt(1440)}
+        playing
+        lengthTicks={CLIP_LENGTH}
+        offsetTick={CLIP_START}
+        toX={rollTickToX}
+      />,
+    );
+    runFrame();
+    rerender(
+      <Playhead
+        engine={engineAt(1440)}
+        playing={false}
+        lengthTicks={CLIP_LENGTH}
+        offsetTick={CLIP_START}
+        toX={rollTickToX}
+      />,
+    );
+    expect(transformOf(container)).toBe("translateX(0px)");
+    expect(callbacks.size).toBe(0);
+  });
+
+  it("주입하지 않으면 기본 동작(타임라인 좌표)이 그대로다", () => {
+    const { container } = render(
+      <Playhead engine={engineAt(960)} playing lengthTicks={LENGTH} />,
+    );
+    runFrame();
+    expect(transformOf(container)).toBe(`translateX(${tickToX(960)}px)`);
   });
 });

@@ -36,6 +36,12 @@ import {
 import { mulberry32 } from "@/lib/score/testing/random";
 import { validateSong } from "@/lib/score/validate";
 
+/**
+ * 시드 20개 × 수백 번 연산을 도는 속성 테스트의 제한 시간. 단독으로는 약 1~2초지만 전체 스위트가
+ * 병렬로 도는 동안엔 5초 기본값을 넘길 수 있다(연산량은 정해져 있고 CPU 경합만 달라진다).
+ */
+const PROPERTY_TIMEOUT_MS = 30_000;
+
 const C: Chord = { root: 0, quality: "maj" };
 const AM: Chord = { root: 9, quality: "min" };
 const F: Chord = { root: 5, quality: "maj" };
@@ -527,7 +533,7 @@ describe("속성: 무작위 편집 열", () => {
 
   it("시드 20개 x 연산 200번 뒤에도 매번 유효하고 반마디 격자를 지킨다(잘못된 코드 포함)", () => {
     runProgressionOps(() => base(), true);
-  });
+  }, PROPERTY_TIMEOUT_MS);
 
   it("어긋난 불러온 곡(구간이 격자에 안 맞음)에서도 유효하고 길이 합이 곡 길이다", () => {
     runProgressionOps(
@@ -1526,5 +1532,5 @@ describe("속성: 모든 편집 함수를 섞은 무작위 열", () => {
     ] as const) {
       expect(thrown.get(op) ?? 0, `${op} 오류 경로`).toBeGreaterThan(0);
     }
-  });
+  }, PROPERTY_TIMEOUT_MS);
 });
