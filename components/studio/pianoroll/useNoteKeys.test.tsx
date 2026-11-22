@@ -315,6 +315,26 @@ describe("Ctrl/Cmd+A", () => {
     expect(pressedKeys().sort()).toEqual(["0:60", "0:64", "1920:69", "960:60"]);
   });
 
+  it("세기 막대에 포커스가 남아 있어도 Ctrl+A는 음 전체를 선택한다(브라우저 전체 선택으로 새지 않는다). Delete는 여전히 무시한다", () => {
+    const h = renderRoll();
+    const bar = screen
+      .getByTestId("roll-velocity-bars")
+      .querySelector<HTMLElement>('[role="slider"]')!;
+    bar.focus();
+    expect(press("a", { ctrlKey: true }, bar)).toBe(false);
+    expect(pressedKeys()).toHaveLength(4);
+    const before = h.studio().song;
+    press("Delete", {}, bar);
+    expect(h.studio().song).toBe(before);
+  });
+
+  it("입력 요소(격자 단위 라디오) 위의 Ctrl+A는 브라우저에 맡긴다", () => {
+    renderRoll();
+    const radio = screen.getByRole("radio", { name: "1/8" });
+    expect(press("a", { ctrlKey: true }, radio)).toBe(true);
+    expect(pressedKeys()).toHaveLength(0);
+  });
+
   it("Cmd+A도 같다. 음이 없으면 처리하지 않는다", () => {
     renderRoll(songWithNotes({ trackId: PIANO, bars: 1, notes: [] }));
     expect(press("a", { metaKey: true })).toBe(true);

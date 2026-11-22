@@ -77,19 +77,26 @@ export function noteKeyCommand(
   return null;
 }
 
-/** 글자를 입력하는 요소·`role=slider`(자기 키를 가진다)는 건드리지 않는다. */
-const OWN_KEYS =
-  'input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="slider"]';
+/** 글자를 입력하는 요소는 자기 키를 가진다. 건드리지 않는다. */
+const TEXT_KEYS =
+  'input, textarea, select, [contenteditable]:not([contenteditable="false"])';
+/** `role=slider`(세기 막대)도 자기 키(↑/↓)를 가진다. */
+const OWN_KEYS = `${TEXT_KEYS}, [role="slider"]`;
 
 /**
  * 이 키 입력이 격자 편집을 향한 것인가: 포커스가 격자 스크롤 영역 안(음 버튼 포함)이거나, 포커스가
  * 어디에도 없을 때(body — 음을 끌어 옮기면 포커스를 쥔 음 버튼이 다시 만들어져 사라진다)다.
+ * `allowSlider`는 슬라이더가 자기 키로 쓰지 않는 명령(전체 선택)용이다 — 세기 막대를 끌고 난 뒤
+ * 포커스가 막대에 남아 있어도 `Ctrl/Cmd+A`가 브라우저의 페이지 텍스트 전체 선택으로 새지 않게 한다.
  */
 function targetsGrid(
   target: Element | null,
   scroll: HTMLElement | null,
+  allowSlider = false,
 ): boolean {
-  if (!target || target.closest(OWN_KEYS)) return false;
+  if (!target || target.closest(allowSlider ? TEXT_KEYS : OWN_KEYS)) {
+    return false;
+  }
   if (target === document.body || target === document.documentElement) {
     return true;
   }
@@ -146,9 +153,14 @@ export function useNoteKeys(options: UseNoteKeysOptions): void {
       if (typeof e.key !== "string") return;
       const o = ref.current;
       const target = e.target instanceof Element ? e.target : null;
-      if (!targetsGrid(target, o.scrollRef.current)) return;
       const cmd = noteKeyCommand(e, GRID_UNITS[o.unit]);
-      if (!cmd || hasActiveGesture()) return;
+      if (!cmd) return;
+      if (
+        !targetsGrid(target, o.scrollRef.current, cmd.type === "selectAll")
+      ) {
+        return;
+      }
+      if (hasActiveGesture()) return;
       const { song, trackId, clipId, unit, selection } = o;
 
       if (cmd.type === "selectAll") {
